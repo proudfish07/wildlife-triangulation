@@ -19,7 +19,7 @@
 <body>
   <div class="input-panel">
     <h2>輸入觀測點（每行：緯度, 經度, 方位角）</h2>
-    <textarea id="input" placeholder="例如：\n23.5,121,45\n23.6,121.1,270"></textarea>
+    <textarea id="input" placeholder="例如：\n23.5,121,0\n23.6,121.1,270"></textarea>
     <button onclick="processInput()">進行定位</button>
     <div id="pointTable"></div>
   </div>
@@ -30,8 +30,9 @@
     const map = L.map('map').setView([23.5, 121], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+    // 修正：使 0° 為正北，順時針方向，Leaflet 使用經度為 x，緯度為 y
     function bearingToRadians(b) {
-      return (b - 90) * Math.PI / 180; // 修正為順時針從正北開始
+      return (90 - b) * Math.PI / 180;
     }
 
     function lineFromPointBearing(lat, lon, bearing) {
