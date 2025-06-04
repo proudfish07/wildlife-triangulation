@@ -56,6 +56,11 @@
       return [y1 + dy1 * t, x1 + dx1 * t];
     }
 
+    function updateInputArea() {
+      const lines = recordedPoints.map(p => `${p.lat.toFixed(5)},${p.lon.toFixed(5)},`);
+      document.getElementById('input').value = lines.join('\n');
+    }
+
     function displayPointsAndCalculate(lines) {
       map.eachLayer(layer => {
         if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
@@ -116,15 +121,9 @@
       navigator.geolocation.getCurrentPosition(pos => {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
-        const input = prompt(`目前座標：\n緯度: ${lat.toFixed(5)}, 經度: ${lon.toFixed(5)}\n請輸入面對觀測方向的方位角（0-360°）：`);
-        if (input === null) return;
-        const bearing = parseFloat(input);
-        if (isNaN(bearing) || bearing < 0 || bearing >= 360) {
-          alert('方位角格式錯誤，請輸入 0 至 359 的數字');
-          return;
-        }
-        recordedPoints.push({ lat, lon, bearing });
-        alert(`已記錄：\n緯度: ${lat.toFixed(5)}, 經度: ${lon.toFixed(5)}, 方位角: ${bearing.toFixed(1)}°`);
+        recordedPoints.push({ lat, lon, bearing: null });
+        updateInputArea();
+        alert(`已記錄座標：\n緯度: ${lat.toFixed(5)}, 經度: ${lon.toFixed(5)}\n請至下方手動輸入方位角`);
       }, () => alert('無法取得定位資訊'));
     }
 
