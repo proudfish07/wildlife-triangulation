@@ -12,13 +12,16 @@
     .input-panel { padding: 1rem; }
     .input-panel textarea { width: 100%; height: 100px; }
     .input-panel button { margin-top: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: 0.5rem; border: 1px solid #ccc; text-align: center; }
   </style>
 </head>
 <body>
   <div class="input-panel">
-    <h2>輸入觀測點（格式：lat,lon,bearing）</h2>
-    <textarea id="input"></textarea>
+    <h2>輸入觀測點（每行：緯度, 經度, 方位角）</h2>
+    <textarea id="input" placeholder="例如：\n23.5,121,45\n23.6,121.1,270"></textarea>
     <button onclick="processInput()">進行定位</button>
+    <div id="pointTable"></div>
   </div>
   <div id="map"></div>
 
@@ -28,14 +31,14 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     function bearingToRadians(b) {
-      return (90 - b) * Math.PI / 180; // 修正方位角方向，使正北為0°
+      return (b - 90) * Math.PI / 180; // 修正為順時針從正北開始
     }
 
     function lineFromPointBearing(lat, lon, bearing) {
       const angle = bearingToRadians(bearing);
       const dx = Math.cos(angle);
       const dy = Math.sin(angle);
-      return { x: lon, y: lat, dx, dy };
+      return { x: lon, y: lat, dx, dy, lat, lon, bearing };
     }
 
     function getIntersection(line1, line2) {
@@ -55,16 +58,23 @@
       const input = document.getElementById('input').value.trim().split('\n');
       const lines = [];
 
-      input.forEach(line => {
+      let tableHtml = '<table><tr><th>#</th><th>緯度</th><th>經度</th><th>方位角</th></tr>';
+
+      input.forEach((line, idx) => {
         const [lat, lon, bearing] = line.split(',').map(Number);
         const point = lineFromPointBearing(lat, lon, bearing);
         lines.push(point);
 
-        const marker = L.marker([lat, lon]).addTo(map).bindPopup(`方位角: ${bearing}°<br>座標: ${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+        const marker = L.marker([lat, lon]).addTo(map).bindPopup(`觀測點 ${idx + 1}<br>方位角: ${bearing}°<br>座標: ${lat.toFixed(5)}, ${lon.toFixed(5)}`);
         const endLat = lat + point.dy * 0.1;
         const endLon = lon + point.dx * 0.1;
         L.polyline([[lat, lon], [endLat, endLon]], { color: 'red' }).addTo(map);
+
+        tableHtml += `<tr><td>${idx + 1}</td><td>${lat.toFixed(5)}</td><td>${lon.toFixed(5)}</td><td>${bearing}°</td></tr>`;
       });
+
+      tableHtml += '</table>';
+      document.getElementById('pointTable').innerHTML = tableHtml;
 
       let intersections = [];
       for (let i = 0; i < lines.length; i++) {
