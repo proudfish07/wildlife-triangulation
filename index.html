@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wildlife Triangulation Tool</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #map { height: 60vh; }
+    .input-panel { padding: 1rem; }
+    .input-panel textarea { width: 100%; height: 100px; }
+    .input-panel button { margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="input-panel">
+    <h2>輸入觀測點（格式：lat,lon,bearing）</h2>
+    <textarea id="input"></textarea>
+    <button onclick="processInput()">進行定位</button>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([23.5, 121], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    function bearingToRadians(b) {
+      return (b - 90) * Math.PI / 180;
+    }
+
+    function lineFromPointBearing(lat, lon, bearing) {
+      const angle = bearingToRadians(bearing);
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      return { x: lon, y: lat, dx, dy };
+    }
+
+    function getIntersection(line1, line2) {
+      const { x: x1, y: y1, dx: dx1, dy: dy1 } = line1;
+      const { x: x2, y: y2, dx: dx2, dy: dy2 } = line2;
+      const det = dx1 * dy2 - dy1 * dx2;
+      if (Math.abs(det) < 1e-10) return null;
+      const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / det;
+      return [y1 + dy1 * t, x1 + dx1 * t];
+    }
+
+    function processInput() {
+      map.eachLayer(layer => { if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer); });
+
+      const input = document.getElementById('input').value.trim().split('\n');
+      const lines = [];
+
+      input.forEach(line => {
+        const [lat, lon, bearing] = line.split(',').map(Number);
+        const point = lineFromPointBearing(lat, lon, bearing);
+        lines.push(point);
+
+        const marker = L.marker([lat, lon]).addTo(map).bindPopup(`Bearing: ${bearing}°`).openPopup();
+        const endLat = lat + point.dy * 0.1;
+        const endLon = lon + point.dx * 0.1;
+        L.polyline([[lat, lon], [endLat, endLon]], { color: 'red' }).addTo(map);
+      });
+
+      let intersections = [];
+      for (let i = 0; i < lines.length; i++) {
+        for (let j = i + 1; j < lines.length; j++) {
+          const inter = getIntersection(lines[i], lines[j]);
+          if (inter) intersections.push(inter);
+        }
+      }
+
+      if (intersections.length > 0) {
+        const avgLat = intersections.reduce((sum, p) => sum + p[0], 0) / intersections.length;
+        const avgLon = intersections.reduce((sum, p) => sum + p[1], 0) / intersections.length;
+        L.marker([avgLat, avgLon], { color: 'blue' }).addTo(map).bindPopup('預測位置').openPopup();
+        map.setView([avgLat, avgLon], 13);
+      }
+    }
+  </script>
+</body>
+</html>
