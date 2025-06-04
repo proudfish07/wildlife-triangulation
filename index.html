@@ -28,7 +28,7 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     function bearingToRadians(b) {
-      return (b - 90) * Math.PI / 180;
+      return (90 - b) * Math.PI / 180; // 修正方位角方向，使正北為0°
     }
 
     function lineFromPointBearing(lat, lon, bearing) {
@@ -48,7 +48,9 @@
     }
 
     function processInput() {
-      map.eachLayer(layer => { if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer); });
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
+      });
 
       const input = document.getElementById('input').value.trim().split('\n');
       const lines = [];
@@ -58,7 +60,7 @@
         const point = lineFromPointBearing(lat, lon, bearing);
         lines.push(point);
 
-        const marker = L.marker([lat, lon]).addTo(map).bindPopup(`Bearing: ${bearing}°`).openPopup();
+        const marker = L.marker([lat, lon]).addTo(map).bindPopup(`方位角: ${bearing}°<br>座標: ${lat.toFixed(5)}, ${lon.toFixed(5)}`);
         const endLat = lat + point.dy * 0.1;
         const endLon = lon + point.dx * 0.1;
         L.polyline([[lat, lon], [endLat, endLon]], { color: 'red' }).addTo(map);
@@ -75,7 +77,8 @@
       if (intersections.length > 0) {
         const avgLat = intersections.reduce((sum, p) => sum + p[0], 0) / intersections.length;
         const avgLon = intersections.reduce((sum, p) => sum + p[1], 0) / intersections.length;
-        L.marker([avgLat, avgLon], { color: 'blue' }).addTo(map).bindPopup('預測位置').openPopup();
+        L.marker([avgLat, avgLon], { color: 'blue' }).addTo(map)
+          .bindPopup(`預測位置<br>座標: ${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}`).openPopup();
         map.setView([avgLat, avgLon], 13);
       }
     }
