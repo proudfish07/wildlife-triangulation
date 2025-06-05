@@ -20,7 +20,6 @@
   <div class="input-panel">
     <h2>觀測記錄與定位</h2>
     <button onclick="recordPoint()">記錄觀測點</button>
-    <button onclick="calculateFromRecorded()">進行定位</button>
     <textarea id="input" placeholder="或手動輸入資料：緯度,經度,方位角，每行一筆"></textarea>
     <button onclick="processInput()">從輸入資料定位</button>
     <button onclick="shareLocation()">分享預測位置</button>
@@ -58,11 +57,11 @@
 
     function updateInputArea() {
       const existingLines = document.getElementById('input').value.trim().split('\n');
-       const lines = recordedPoints.map((p, i) => {
-         const existing = existingLines[i]?.split(',') || [];
-         const bearing = existing[2] ? existing[2] : '';
-         return `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${bearing}`;
-       });
+      const lines = recordedPoints.map((p, i) => {
+        const existing = existingLines[i]?.split(',') || [];
+        const bearing = existing[2] ? existing[2] : '';
+        return `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${bearing}`;
+      });
       document.getElementById('input').value = lines.join('\n');
     }
 
@@ -109,11 +108,6 @@
         const [lat, lon, bearing] = line.split(',').map(Number);
         return lineFromPointBearing(lat, lon, bearing);
       });
-      displayPointsAndCalculate(lines);
-    }
-
-    function calculateFromRecorded() {
-      const lines = recordedPoints.map(p => lineFromPointBearing(p.lat, p.lon, p.bearing));
       displayPointsAndCalculate(lines);
     }
 
