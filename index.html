@@ -57,7 +57,12 @@
     }
 
     function updateInputArea() {
-      const lines = recordedPoints.map(p => `${p.lat.toFixed(5)},${p.lon.toFixed(5)},`);
+      const existingLines = document.getElementById('input').value.trim().split('\n');
+       const lines = recordedPoints.map((p, i) => {
+         const existing = existingLines[i]?.split(',') || [];
+         const bearing = existing[2] ? existing[2] : '';
+         return `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${bearing}`;
+       });
       document.getElementById('input').value = lines.join('\n');
     }
 
