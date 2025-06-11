@@ -22,9 +22,14 @@
     <button onclick="recordPoint()">記錄觀測點</button>
     <button onclick="clearAllData()">清除所有資料</button>
     <button onclick="saveInputData()">保存資料</button>
+    <div style="color:#666;font-size:0.95em;margin-bottom:0.5em;">
+      範例格式：<br>
+      <span style="font-family:monospace;white-space:pre;">2025-06-11,08:45:00,23.50000,121.00000,40,15,80</span><br>
+      <span style="font-family:monospace;white-space:pre;">日期,時間,緯度,經度,方位角,gain,強度</span>
+    </div>
     <textarea 
       id="input"
-      placeholder="每行格式：日期,時間,緯度,經度,方位角,gain,強度&#10;例如: 2025-06-11,08:45:00,23.50000,121.00000,40,15,80"></textarea>
+      placeholder="每行格式：日期,時間,緯度,經度,方位角,gain,強度"></textarea>
     <button onclick="processInput()">從輸入資料定位</button>
     <button onclick="shareLocation()">分享預測位置</button>
     <div id="pointTable"></div>
@@ -41,7 +46,7 @@
 
     let recordedPoints = [];
     let currentPrediction = null;
-    let currentLocationMarker = null;
+    let currentLocationCircle = null;
 
     function savePointsToStorage() {
       localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
@@ -69,7 +74,6 @@
           if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
         });
         currentPrediction = null;
-        // 重新顯示目前位置
         showCurrentLocationOnMap();
       }
     }
@@ -95,9 +99,7 @@
     }
 
     function updateInputArea() {
-      // 以目前的recordedPoints組成textarea內容
       const lines = recordedPoints.map(p => {
-        // 日期,時間,緯度,經度,方位角,gain,強度
         const date = p.date || '';
         const time = p.time || '';
         const lat = (typeof p.lat === 'number') ? p.lat.toFixed(5) : '';
@@ -115,15 +117,10 @@
       map.eachLayer(layer => {
         if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
       });
-
-      // 重新顯示目前位置
       showCurrentLocationOnMap();
 
       let tableHtml = '<table><tr><th>#</th><th>日期</th><th>時間</th><th>緯度</th><th>經度</th><th>方位角</th><th>Gain</th><th>強度</th></tr>';
-
-      // only lines with lat/lon/bearing will be used for定位
       const validLines = [];
-
       lines.forEach((point, idx) => {
         const { date, time, lat, lon, bearing, gain, strength } = point;
         if (typeof lat === "number" && typeof lon === "number" && typeof bearing === "number" && !isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
@@ -172,7 +169,6 @@
 
     function processInput() {
       const input = document.getElementById('input').value.trim().split('\n');
-      // 允許格式為: 日期,時間,緯度,經度,方位角,gain,強度
       recordedPoints = input.map(line => {
         const [date, time, lat, lon, bearing, gain, strength] = line.split(',');
         return {
@@ -190,7 +186,6 @@
     }
 
     function saveInputData() {
-      // 跟 processInput 一樣，但不會立即定位，只保存
       const input = document.getElementById('input').value.trim().split('\n');
       recordedPoints = input.map(line => {
         const [date, time, lat, lon, bearing, gain, strength] = line.split(',');
@@ -205,7 +200,7 @@
         };
       });
       savePointsToStorage();
-      updateInputArea(); // 以規範格式回填
+      updateInputArea();
       alert('資料已保存！');
     }
 
@@ -240,8 +235,6 @@
         alert('沒有觀測資料可分享');
         return;
       }
-
-      // 組裝分享內容
       let text = '';
       text += '【野生動物三角定位觀測紀錄】\n';
       text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n';
@@ -264,9 +257,8 @@
       }
     }
 
-    // 顯示目前位置在地圖上的標記
+    // 用藍色小圓點顯示目前位置
     function showCurrentLocationOnMap(lat=null, lon=null) {
-      // 若未指定則嘗試取得
       if (lat === null || lon === null) {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(pos => {
@@ -275,31 +267,26 @@
         }
         return;
       }
-      if (currentLocationMarker) {
-        map.removeLayer(currentLocationMarker);
+      if (currentLocationCircle) {
+        map.removeLayer(currentLocationCircle);
       }
-      currentLocationMarker = L.marker([lat, lon], {
-        icon: L.icon({
-          iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-          iconAnchor: [12, 41],
-          popupAnchor: [1, -34],
-          shadowSize: [41, 41],
-        })
+      currentLocationCircle = L.circleMarker([lat, lon], {
+        radius: 8,
+        color: '#007bff',
+        fillColor: '#339CFF',
+        fillOpacity: 0.8
       }).addTo(map).bindPopup("你現在的位置").openPopup();
     }
 
-    // textarea 變動自動保存
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('input').addEventListener('input', function() {
         saveInputData();
       });
     });
 
-    // 頁面載入自動載入資料與自動定位
     window.onload = function () {
       loadPointsFromStorage();
       showCurrentLocationOnMap();
-      // 若第一次進入頁面，且沒有觀測資料，自動記錄目前位置
       if (recordedPoints.length === 0 && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
           const now = new Date();
@@ -322,7 +309,10 @@
         });
       }
     };
-
+    // 可選：PWA service worker 註冊（如需離線）
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
   </script>
 </body>
 </html>
