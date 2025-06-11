@@ -20,6 +20,7 @@
   <div class="input-panel">
     <h2>觀測記錄與定位</h2>
     <button onclick="recordPoint()">記錄觀測點</button>
+    <button onclick="clearAllData()">清除所有資料</button>
     <textarea id="input" placeholder="或手動輸入資料：緯度,經度,方位角，每行一筆"></textarea>
     <button onclick="processInput()">從輸入資料定位</button>
     <button onclick="shareLocation()">分享預測位置</button>
@@ -38,6 +39,39 @@
 
     let recordedPoints = [];
     let currentPrediction = null;
+
+    // 儲存到 localStorage
+    function savePointsToStorage() {
+      localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
+    }
+
+    // 從 localStorage 載入
+    function loadPointsFromStorage() {
+      const data = localStorage.getItem('wildlife_points');
+      if (data) {
+        try {
+          recordedPoints = JSON.parse(data);
+          updateInputArea();
+        } catch (e) {
+          recordedPoints = [];
+        }
+      }
+    }
+
+    // 清除所有資料功能
+    function clearAllData() {
+      if (confirm('確定要清除所有資料嗎？此動作無法還原。')) {
+        recordedPoints = [];
+        localStorage.removeItem('wildlife_points');
+        document.getElementById('input').value = '';
+        document.getElementById('pointTable').innerHTML = '';
+        // 清空地圖上的標記與線條
+        map.eachLayer(layer => {
+          if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
+        });
+        currentPrediction = null;
+      }
+    }
 
     function bearingToRadians(b) {
       return ((-b + 90 + 360) % 360) * Math.PI / 180;
@@ -63,10 +97,11 @@
       const existingLines = document.getElementById('input').value.trim().split('\n');
       const lines = recordedPoints.map((p, i) => {
         const existing = existingLines[i]?.split(',') || [];
-        const bearing = existing[2] ? existing[2] : '';
+        const bearing = existing[2] ? existing[2] : (p.bearing !== null ? p.bearing : '');
         return `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${bearing}`;
       });
       document.getElementById('input').value = lines.join('\n');
+      savePointsToStorage();
     }
 
     function displayPointsAndCalculate(lines) {
@@ -113,6 +148,13 @@
         return lineFromPointBearing(lat, lon, bearing);
       });
       displayPointsAndCalculate(lines);
+
+      // 解析 textarea 內容同步回 recordedPoints 與 localStorage
+      recordedPoints = input.map(line => {
+        const [lat, lon, bearing] = line.split(',').map(Number);
+        return { lat, lon, bearing };
+      });
+      savePointsToStorage();
     }
 
     function recordPoint() {
@@ -126,6 +168,7 @@
         const lon = pos.coords.longitude;
         recordedPoints.push({ lat, lon, bearing: null });
         updateInputArea();
+        savePointsToStorage();
         alert(`已記錄座標：\n緯度: ${lat.toFixed(5)}, 經度: ${lon.toFixed(5)}\n請至下方手動輸入方位角`);
       }, () => alert('無法取得定位資訊'));
     }
@@ -147,6 +190,23 @@
         prompt('請手動複製以下資訊分享：', text);
       }
     }
+
+    // 頁面載入自動載入資料與自動定位
+    window.onload = function () {
+      loadPointsFromStorage();
+
+      // 若第一次進入頁面可自動定位記錄第一點
+      if (recordedPoints.length === 0 && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          recordedPoints.push({ lat, lon, bearing: null });
+          updateInputArea();
+          savePointsToStorage();
+          alert(`已自動記錄目前座標：\n緯度: ${lat.toFixed(5)}, 經度: ${lon.toFixed(5)}\n請至下方手動輸入方位角`);
+        });
+      }
+    };
   </script>
 </body>
 </html>
