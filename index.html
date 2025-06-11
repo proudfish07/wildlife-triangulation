@@ -126,7 +126,7 @@
     }
 
     function bearingToRadians(b) {
-      return ((-b + 90 + 360) % 360) * Math.PI / 180;
+      return (b - 90) * Math.PI / 180;
     }
 
     function lineFromPointBearing(lat, lon, bearing) {
