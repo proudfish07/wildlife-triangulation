@@ -22,10 +22,9 @@
 <body>
   <div class="input-panel">
     <h2>觀測記錄與定位</h2>
-    <button onclick="addRow()">新增一筆</button>
     <button onclick="recordPoint()">自動定位</button>
     <button onclick="clearAllData()">清除所有資料</button>
-    <button onclick="processInput()">從表格資料定位</button>
+    <button onclick="processInput()">交點計算</button>
     <button onclick="shareLocation()">分享預測位置</button>
     <div class="example-block">
       範例：<br>
@@ -41,6 +40,7 @@
       </thead>
       <tbody id="inputTableBody"></tbody>
     </table>
+    <!-- 計算結果不再顯示原資料明細 -->
     <div id="pointTable"></div>
   </div>
   <div id="map"></div>
@@ -88,13 +88,6 @@
         currentPrediction = null;
         showCurrentLocationOnMap();
       }
-    }
-
-    // 新增一列
-    function addRow(def) {
-      recordedPoints.push(def || {date:'',time:'',lat:'',lon:'',bearing:'',gain:'',strength:''});
-      savePointsToStorage();
-      renderInputTable();
     }
 
     // 渲染表格
@@ -158,36 +151,22 @@
       });
       showCurrentLocationOnMap();
 
-      let tableHtml = '<table><tr><th>#</th><th>日期</th><th>時間</th><th>緯度</th><th>經度</th><th>方位角</th><th>Gain</th><th>強度</th></tr>';
+      // 只放交點計算結果，不再重複呈現原資料
       const validLines = [];
       points.forEach((p, idx) => {
-        // 只有三個欄位有內容才參與定位
         const lat = parseFloat(p.lat);
         const lon = parseFloat(p.lon);
         const bearing = parseFloat(p.bearing);
         if (!isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
           validLines.push(lineFromPointBearing(lat, lon, bearing));
           const marker = L.marker([lat, lon]).addTo(map).bindPopup(
-            `觀測點 ${idx + 1}<br>日期: ${p.date || ''}<br>時間: ${p.time || ''}<br>方位角: ${bearing}°<br>座標: ${lat}, ${lon}<br>Gain: ${p.gain || ''}<br>強度: ${p.strength || ''}`
+            `觀測點 ${idx + 1}<br>座標: ${lat}, ${lon}<br>方位角: ${bearing}°`
           );
           const endLat = lat + Math.cos(bearingToRadians(bearing)) * 0.1;
           const endLon = lon + Math.sin(bearingToRadians(bearing)) * 0.1;
           L.polyline([[lat, lon], [endLat, endLon]], { color: 'red' }).addTo(map);
         }
-        tableHtml += `<tr>
-          <td>${idx + 1}</td>
-          <td>${p.date || ''}</td>
-          <td>${p.time || ''}</td>
-          <td>${p.lat || ''}</td>
-          <td>${p.lon || ''}</td>
-          <td>${p.bearing || ''}</td>
-          <td>${p.gain || ''}</td>
-          <td>${p.strength || ''}</td>
-        </tr>`;
       });
-
-      tableHtml += '</table>';
-      document.getElementById('pointTable').innerHTML = tableHtml;
 
       let intersections = [];
       for (let i = 0; i < validLines.length; i++) {
@@ -204,12 +183,16 @@
         L.marker([avgLat, avgLon], { color: 'blue' }).addTo(map)
           .bindPopup(`預測位置<br>座標: ${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}`).openPopup();
         map.setView([avgLat, avgLon], 13);
+
+        document.getElementById('pointTable').innerHTML =
+          `<div style="margin-top:1em;">交點平均位置：<br>緯度: ${avgLat.toFixed(5)}，經度: ${avgLon.toFixed(5)}</div>`;
       } else {
         currentPrediction = null;
+        document.getElementById('pointTable').innerHTML = '';
       }
     }
 
-    // 按下定位時
+    // 按下交點計算時
     function processInput() {
       // 先同步表格資料
       const tableRows = document.querySelectorAll('#inputTableBody tr');
@@ -240,7 +223,7 @@
         const pad = n => n < 10 ? '0' + n : n;
         const date = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
         const time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        addRow({
+        recordedPoints.push({
           date: date,
           time: time,
           lat: pos.coords.latitude.toFixed(5),
@@ -249,6 +232,8 @@
           gain: '',
           strength: ''
         });
+        savePointsToStorage();
+        renderInputTable();
         alert(`已記錄座標：\n日期: ${date}\n時間: ${time}\n緯度: ${pos.coords.latitude.toFixed(5)}, 經度: ${pos.coords.longitude.toFixed(5)}\n請在表格輸入方位角、gain、強度`);
         showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
       }, () => alert('無法取得定位資訊'));
@@ -305,7 +290,6 @@
     window.onload = function () {
       loadPointsFromStorage();
       showCurrentLocationOnMap();
-      // 不再自動新增第一筆定位資料
     };
 
     // PWA service worker 註冊（如需離線，請備妥 sw.js）
