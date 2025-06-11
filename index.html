@@ -10,28 +10,36 @@
     body { margin: 0; font-family: sans-serif; }
     #map { height: 60vh; }
     .input-panel { padding: 1rem; }
-    .input-panel textarea { width: 100%; height: 100px; }
     .input-panel button { margin: 0.5rem 0.5rem 0.5rem 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { padding: 0.5rem; border: 1px solid #ccc; text-align: center; }
+    .input-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .input-table th, .input-table td { padding: 0.5rem; border: 1px solid #ccc; text-align: center; }
+    .input-table input { width: 7em; }
+    .input-table .op-btn { width: 3em; }
+    .example-block { color: #666; font-size: 0.95em; margin-bottom: 0.5em; }
+    .example-block span { font-family: monospace; white-space: pre; }
   </style>
 </head>
 <body>
   <div class="input-panel">
     <h2>觀測記錄與定位</h2>
-    <button onclick="recordPoint()">記錄觀測點</button>
+    <button onclick="addRow()">新增一筆</button>
     <button onclick="clearAllData()">清除所有資料</button>
-    <button onclick="saveInputData()">保存資料</button>
-    <div style="color:#666;font-size:0.95em;margin-bottom:0.5em;">
-      範例格式：<br>
-      <span style="font-family:monospace;white-space:pre;">2025-06-11,08:45:00,23.50000,121.00000,40,15,80</span><br>
-      <span style="font-family:monospace;white-space:pre;">日期,時間,緯度,經度,方位角,gain,強度</span>
-    </div>
-    <textarea 
-      id="input"
-      placeholder="每行格式：日期,時間,緯度,經度,方位角,gain,強度"></textarea>
-    <button onclick="processInput()">從輸入資料定位</button>
+    <button onclick="processInput()">從表格資料定位</button>
     <button onclick="shareLocation()">分享預測位置</button>
+    <div class="example-block">
+      範例：<br>
+      <span>2025-06-11,08:45:00,23.50000,121.00000,40,15,80</span><br>
+      <span>日期,時間,緯度,經度,方位角,gain,強度</span>
+    </div>
+    <table class="input-table" id="inputTable">
+      <thead>
+        <tr>
+          <th>日期</th><th>時間</th><th>緯度</th><th>經度</th>
+          <th>方位角</th><th>gain</th><th>強度</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="inputTableBody"></tbody>
+    </table>
     <div id="pointTable"></div>
   </div>
   <div id="map"></div>
@@ -48,27 +56,30 @@
     let currentPrediction = null;
     let currentLocationCircle = null;
 
+    // 儲存到 localStorage
     function savePointsToStorage() {
       localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
     }
 
+    // 從 localStorage 載入
     function loadPointsFromStorage() {
       const data = localStorage.getItem('wildlife_points');
       if (data) {
         try {
           recordedPoints = JSON.parse(data);
-          updateInputArea();
         } catch (e) {
           recordedPoints = [];
         }
       }
+      renderInputTable();
     }
 
+    // 清除所有資料
     function clearAllData() {
       if (confirm('確定要清除所有資料嗎？此動作無法還原。')) {
         recordedPoints = [];
         localStorage.removeItem('wildlife_points');
-        document.getElementById('input').value = '';
+        renderInputTable();
         document.getElementById('pointTable').innerHTML = '';
         map.eachLayer(layer => {
           if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
@@ -76,6 +87,49 @@
         currentPrediction = null;
         showCurrentLocationOnMap();
       }
+    }
+
+    // 新增一列
+    function addRow(def) {
+      // def: optional, 用於自動填資料
+      recordedPoints.push(def || {date:'',time:'',lat:'',lon:'',bearing:'',gain:'',strength:''});
+      savePointsToStorage();
+      renderInputTable();
+    }
+
+    // 渲染表格
+    function renderInputTable() {
+      const tbody = document.getElementById('inputTableBody');
+      tbody.innerHTML = '';
+      recordedPoints.forEach((p, idx) => {
+        const row = document.createElement('tr');
+        ['date','time','lat','lon','bearing','gain','strength'].forEach(key => {
+          const td = document.createElement('td');
+          const input = document.createElement('input');
+          input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
+          if (key === 'lat' || key === 'lon') input.step = 'any';
+          input.value = (p[key]!==null && p[key]!==undefined) ? p[key] : '';
+          input.oninput = () => {
+            recordedPoints[idx][key] = input.value;
+            savePointsToStorage();
+          };
+          td.appendChild(input);
+          row.appendChild(td);
+        });
+        // 刪除按鈕
+        const tdDel = document.createElement('td');
+        tdDel.className = 'op-btn';
+        const btnDel = document.createElement('button');
+        btnDel.textContent = '刪除';
+        btnDel.onclick = () => {
+          recordedPoints.splice(idx,1);
+          savePointsToStorage();
+          renderInputTable();
+        };
+        tdDel.appendChild(btnDel);
+        row.appendChild(tdDel);
+        tbody.appendChild(row);
+      });
     }
 
     function bearingToRadians(b) {
@@ -98,22 +152,7 @@
       return [y1 + dy1 * t, x1 + dx1 * t];
     }
 
-    function updateInputArea() {
-      const lines = recordedPoints.map(p => {
-        const date = p.date || '';
-        const time = p.time || '';
-        const lat = (typeof p.lat === 'number') ? p.lat.toFixed(5) : '';
-        const lon = (typeof p.lon === 'number') ? p.lon.toFixed(5) : '';
-        const bearing = (p.bearing !== null && p.bearing !== undefined) ? p.bearing : '';
-        const gain = (p.gain !== null && p.gain !== undefined) ? p.gain : '';
-        const strength = (p.strength !== null && p.strength !== undefined) ? p.strength : '';
-        return [date, time, lat, lon, bearing, gain, strength].join(',');
-      });
-      document.getElementById('input').value = lines.join('\n');
-      savePointsToStorage();
-    }
-
-    function displayPointsAndCalculate(lines) {
+    function displayPointsAndCalculate(points) {
       map.eachLayer(layer => {
         if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
       });
@@ -121,12 +160,15 @@
 
       let tableHtml = '<table><tr><th>#</th><th>日期</th><th>時間</th><th>緯度</th><th>經度</th><th>方位角</th><th>Gain</th><th>強度</th></tr>';
       const validLines = [];
-      lines.forEach((point, idx) => {
-        const { date, time, lat, lon, bearing, gain, strength } = point;
-        if (typeof lat === "number" && typeof lon === "number" && typeof bearing === "number" && !isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
+      points.forEach((p, idx) => {
+        // 只有三個欄位有內容才參與定位
+        const lat = parseFloat(p.lat);
+        const lon = parseFloat(p.lon);
+        const bearing = parseFloat(p.bearing);
+        if (!isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
           validLines.push(lineFromPointBearing(lat, lon, bearing));
           const marker = L.marker([lat, lon]).addTo(map).bindPopup(
-            `觀測點 ${idx + 1}<br>日期: ${date || ''}<br>時間: ${time || ''}<br>方位角: ${bearing}°<br>座標: ${lat}, ${lon}<br>Gain: ${gain || ''}<br>強度: ${strength || ''}`
+            `觀測點 ${idx + 1}<br>日期: ${p.date || ''}<br>時間: ${p.time || ''}<br>方位角: ${bearing}°<br>座標: ${lat}, ${lon}<br>Gain: ${p.gain || ''}<br>強度: ${p.strength || ''}`
           );
           const endLat = lat + Math.cos(bearingToRadians(bearing)) * 0.1;
           const endLon = lon + Math.sin(bearingToRadians(bearing)) * 0.1;
@@ -134,13 +176,13 @@
         }
         tableHtml += `<tr>
           <td>${idx + 1}</td>
-          <td>${date || ''}</td>
-          <td>${time || ''}</td>
-          <td>${lat !== undefined ? lat : ''}</td>
-          <td>${lon !== undefined ? lon : ''}</td>
-          <td>${bearing !== undefined && bearing !== null ? bearing : ''}</td>
-          <td>${gain !== undefined && gain !== null ? gain : ''}</td>
-          <td>${strength !== undefined && strength !== null ? strength : ''}</td>
+          <td>${p.date || ''}</td>
+          <td>${p.time || ''}</td>
+          <td>${p.lat || ''}</td>
+          <td>${p.lon || ''}</td>
+          <td>${p.bearing || ''}</td>
+          <td>${p.gain || ''}</td>
+          <td>${p.strength || ''}</td>
         </tr>`;
       });
 
@@ -167,41 +209,24 @@
       }
     }
 
+    // 按下定位時
     function processInput() {
-      const input = document.getElementById('input').value.trim().split('\n');
-      recordedPoints = input.map(line => {
-        const [date, time, lat, lon, bearing, gain, strength] = line.split(',');
+      // 先同步表格資料
+      const tableRows = document.querySelectorAll('#inputTableBody tr');
+      recordedPoints = Array.from(tableRows).map(tr => {
+        const tds = tr.querySelectorAll('td input');
         return {
-          date: date ? date.trim() : '',
-          time: time ? time.trim() : '',
-          lat: lat !== undefined && lat !== '' ? Number(lat) : null,
-          lon: lon !== undefined && lon !== '' ? Number(lon) : null,
-          bearing: bearing !== undefined && bearing !== '' ? Number(bearing) : null,
-          gain: gain !== undefined && gain !== '' ? Number(gain) : null,
-          strength: strength !== undefined && strength !== '' ? Number(strength) : null
-        };
+          date: tds[0].value.trim(),
+          time: tds[1].value.trim(),
+          lat: tds[2].value.trim(),
+          lon: tds[3].value.trim(),
+          bearing: tds[4].value.trim(),
+          gain: tds[5].value.trim(),
+          strength: tds[6].value.trim()
+        }
       });
       savePointsToStorage();
       displayPointsAndCalculate(recordedPoints);
-    }
-
-    function saveInputData() {
-      const input = document.getElementById('input').value.trim().split('\n');
-      recordedPoints = input.map(line => {
-        const [date, time, lat, lon, bearing, gain, strength] = line.split(',');
-        return {
-          date: date ? date.trim() : '',
-          time: time ? time.trim() : '',
-          lat: lat !== undefined && lat !== '' ? Number(lat) : null,
-          lon: lon !== undefined && lon !== '' ? Number(lon) : null,
-          bearing: bearing !== undefined && bearing !== '' ? Number(bearing) : null,
-          gain: gain !== undefined && gain !== '' ? Number(gain) : null,
-          strength: strength !== undefined && strength !== '' ? Number(strength) : null
-        };
-      });
-      savePointsToStorage();
-      updateInputArea();
-      alert('資料已保存！');
     }
 
     function recordPoint() {
@@ -214,18 +239,16 @@
         const pad = n => n < 10 ? '0' + n : n;
         const date = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
         const time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        recordedPoints.push({
+        addRow({
           date: date,
           time: time,
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          bearing: null,
-          gain: null,
-          strength: null
+          lat: pos.coords.latitude.toFixed(5),
+          lon: pos.coords.longitude.toFixed(5),
+          bearing: '',
+          gain: '',
+          strength: ''
         });
-        updateInputArea();
-        savePointsToStorage();
-        alert(`已記錄座標：\n日期: ${date}\n時間: ${time}\n緯度: ${pos.coords.latitude.toFixed(5)}, 經度: ${pos.coords.longitude.toFixed(5)}\n請至下方手動輸入方位角、gain、強度`);
+        alert(`已記錄座標：\n日期: ${date}\n時間: ${time}\n緯度: ${pos.coords.latitude.toFixed(5)}, 經度: ${pos.coords.longitude.toFixed(5)}\n請在表格輸入方位角、gain、強度`);
         showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
       }, () => alert('無法取得定位資訊'));
     }
@@ -239,7 +262,7 @@
       text += '【野生動物三角定位觀測紀錄】\n';
       text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n';
       recordedPoints.forEach((p, i) => {
-        text += `${i+1}. ${p.date || ''},${p.time || ''},${(typeof p.lat === 'number' ? p.lat : '')},${(typeof p.lon === 'number' ? p.lon : '')},${(p.bearing !== null && p.bearing !== undefined ? p.bearing : '')},${(p.gain !== null && p.gain !== undefined ? p.gain : '')},${(p.strength !== null && p.strength !== undefined ? p.strength : '')}\n`;
+        text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''}\n`;
       });
       if (currentPrediction) {
         text += `\n預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
@@ -278,38 +301,32 @@
       }).addTo(map).bindPopup("你現在的位置").openPopup();
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
-      document.getElementById('input').addEventListener('input', function() {
-        saveInputData();
-      });
-    });
-
     window.onload = function () {
       loadPointsFromStorage();
       showCurrentLocationOnMap();
+      // 如果沒有資料，自動加入目前定位
       if (recordedPoints.length === 0 && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
           const now = new Date();
           const pad = n => n < 10 ? '0' + n : n;
           const date = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
           const time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-          recordedPoints.push({
+          addRow({
             date: date,
             time: time,
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            bearing: null,
-            gain: null,
-            strength: null
+            lat: pos.coords.latitude.toFixed(5),
+            lon: pos.coords.longitude.toFixed(5),
+            bearing: '',
+            gain: '',
+            strength: ''
           });
-          updateInputArea();
-          savePointsToStorage();
-          alert(`已自動記錄目前座標：\n日期: ${date}\n時間: ${time}\n緯度: ${pos.coords.latitude.toFixed(5)}, 經度: ${pos.coords.longitude.toFixed(5)}\n請至下方手動輸入方位角、gain、強度`);
+          alert(`已自動記錄目前座標：\n日期: ${date}\n時間: ${time}\n緯度: ${pos.coords.latitude.toFixed(5)}, 經度: ${pos.coords.longitude.toFixed(5)}\n請在表格輸入方位角、gain、強度`);
           showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
         });
       }
     };
-    // 可選：PWA service worker 註冊（如需離線）
+
+    // PWA service worker 註冊（如需離線，請備妥 sw.js）
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js');
     }
