@@ -126,13 +126,13 @@
     }
 
     function bearingToRadians(b) {
-      return (b - 90) * Math.PI / 180;
+      return b * Math.PI / 180;
     }
-
+    
     function lineFromPointBearing(lat, lon, bearing) {
       const angle = bearingToRadians(bearing);
-      const dx = Math.cos(angle);
-      const dy = Math.sin(angle);
+      const dx = Math.sin(angle);
+      const dy = Math.cos(angle);
       return { x: lon, y: lat, dx, dy, lat, lon, bearing };
     }
 
@@ -162,8 +162,9 @@
           const marker = L.marker([lat, lon]).addTo(map).bindPopup(
             `觀測點 ${idx + 1}<br>座標: ${lat}, ${lon}<br>方位角: ${bearing}°`
           );
-          const endLat = lat + Math.cos(bearingToRadians(bearing)) * 0.1;
-          const endLon = lon + Math.sin(bearingToRadians(bearing)) * 0.1;
+          const angle = bearingToRadians(bearing);
+          const endLat = lat + Math.cos(angle) * 0.1;
+          const endLon = lon + Math.sin(angle) * 0.1;
           L.polyline([[lat, lon], [endLat, endLon]], { color: 'red' }).addTo(map);
         }
       });
