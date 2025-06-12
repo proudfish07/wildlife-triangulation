@@ -22,10 +22,8 @@ Wildlife Triangulation
 
 ## 🧪 計算公式
 
-\[
-\bar{lat} = \frac{1}{n} \sum_{i=1}^{n} lat_i,\quad
-\bar{lon} = \frac{1}{n} \sum_{i=1}^{n} lon_i
-\]
+lat_avg = (1/n) × (lat₁ + lat₂ + ... + latₙ)
+lon_avg = (1/n) × (lon₁ + lon₂ + ... + lonₙ)
 
 latᵢ, lonᵢ：第 i 個交點的緯度與經度
 lat_avg, lon_avg：所有交點的平均值（即理論預測位置）
