@@ -17,6 +17,37 @@
     .input-table .op-btn { width: 3em; }
     .example-block { color: #666; font-size: 0.95em; margin-bottom: 0.5em; }
     .example-block span { font-family: monospace; white-space: pre; }
+    .input-table {
+      display: block;
+      width: 100%;
+      overflow-x: auto;
+      white-space: nowrap;
+      min-width: 600px;
+    }
+    .input-table input {
+      min-width: 4em;
+      max-width: 100%;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    @media (max-width: 600px) {
+      .input-panel {
+        padding: 0.5rem;
+      }
+      .input-table th, .input-table td {
+        padding: 0.25rem;
+        font-size: 0.9em;
+      }
+      .input-table input {
+        min-width: 2em;
+        font-size: 0.95em;
+        padding: 0.2em;
+      }
+      .input-panel button {
+        font-size: 0.9em;
+        padding: 0.3em 0.7em;
+      }
+    }
   </style>
 </head>
 <body>
