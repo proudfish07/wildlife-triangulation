@@ -85,6 +85,3 @@ lat_avg, lon_avg：所有交點的平均值（即理論預測位置）
 
 # 🐛 回報問題
 請至 Issue 區 回報錯誤或功能需求。
-
-# 📄 授權
-本專案採用 MIT License，詳見 LICENSE。
