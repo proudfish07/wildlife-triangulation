@@ -24,19 +24,6 @@ Wildlife Triangulation
 
 首次載入後資料會快取，可於離線狀態下使用
 
-# 🔧 本地開發
-如需修改或自行建置：
-
-bash
-複製
-編輯
-git clone https://github.com/proudfish07/wildlife-triangulation.git
-cd wildlife-triangulation
-npm install
-npm run build
-
-建置完成的檔案會位於 /dist 資料夾，可用於部署或包裝成行動 App。
-
 # 🛠️ 技術架構
 - 使用 Vue / Vite 開發
 - 支援 PWA（Progressive Web App）
