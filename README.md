@@ -1,7 +1,5 @@
 # wildlife-triangulation
 
-Wildlife Triangulation
-
 本專案提供一套野生動物定位與三角測量工具，支援離線使用，特別設計給保育人員與研究者在野外缺乏網路的環境中進行精準紀錄與追蹤。
 
 # 📦 專案特色
