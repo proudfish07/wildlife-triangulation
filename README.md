@@ -37,6 +37,20 @@ lat_avg, lon_avg：所有交點的平均值（即理論預測位置）
 - sigloc R 套件 – 基於方位角與強度進行空間估算的 R 工具包
 - Locate III – 針對動物無線電追蹤設計的進階定位軟體
 
+# 📱 如何在手機端安裝與使用（Android / iOS）
+
+## Android 使用者 
+1. 使用 Chrome 或 Firefox 開啟專案頁面：https://proudfish07.github.io/wildlife-triangulation
+2. 點選右上角選單（⋮）> 選擇「安裝應用程式」或「加入主畫面」
+3. App 會以全螢幕方式啟動，並可離線使用
+
+## iOS 使用者
+1. 使用 Safari 瀏覽器開啟：https://proudfish07.github.io/wildlife-triangulation
+2. 點選下方「分享」圖示 > 選擇「加入主畫面」
+3. 點擊加入後，主畫面會出現 App 圖示，可像原生 App 一樣使用
+
+首次載入後資料會快取，可於離線狀態下使用
+
 # 📖 使用說明（手機端操作流程）
 本應用設計用於野外進行發報器追蹤與三角定位分析，可透過手機 GPS 自動紀錄位置並輸入相關參數。以下為完整操作說明與各按鈕功能：
 
@@ -65,21 +79,6 @@ lat_avg, lon_avg：所有交點的平均值（即理論預測位置）
 ## ⚠️ 注意事項
 - 📡 底圖需網路連線 才能正常載入，但即使離線狀態下仍可使用 GPS、自動定位與交點計算等功能。
 - 🛰️ 使用前請確保裝置已開啟定位功能，且授權瀏覽器使用 GPS。
-- 📱 本應用支援安裝為 PWA，詳見下方安裝教學。
-
-# 📱 如何在手機端安裝與使用（Android / iOS）
-
-## Android 使用者 
-1. 使用 Chrome 或 Firefox 開啟專案頁面：https://proudfish07.github.io/wildlife-triangulation
-2. 點選右上角選單（⋮）> 選擇「安裝應用程式」或「加入主畫面」
-3. App 會以全螢幕方式啟動，並可離線使用
-
-## iOS 使用者
-1. 使用 Safari 瀏覽器開啟：https://proudfish07.github.io/wildlife-triangulation
-2. 點選下方「分享」圖示 > 選擇「加入主畫面」
-3. 點擊加入後，主畫面會出現 App 圖示，可像原生 App 一樣使用
-
-首次載入後資料會快取，可於離線狀態下使用
 
 # 🛠️ 技術架構
 - 使用 Vue / Vite 開發
