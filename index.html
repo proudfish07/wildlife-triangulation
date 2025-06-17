@@ -190,19 +190,21 @@
         const bearing = parseFloat(p.bearing);
         if (!isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
           validLines.push(lineFromPointBearing(lat, lon, bearing));
+          // 用hsl的色相直接根據bearing決定顏色
+          const color = `hsl(${Math.round(bearing % 360)}, 80%, 50%)`;
           const marker = L.circleMarker([lat, lon], {
             radius: 7,
-            color,
+            color: color,
             fillColor: color,
-            fillOpacity: 0.8
+            fillOpacity: 0.9
           }).addTo(map).bindPopup(
             `觀測點 ${idx + 1}<br>座標: ${lat}, ${lon}<br>方位角: ${bearing}°`
           );
           const angle = bearingToRadians(bearing);
           const endLat = lat + Math.cos(angle) * 0.1;
           const endLon = lon + Math.sin(angle) * 0.1;
-          const color = `hsl(${Math.round((bearing % 360))}, 80%, 50%)`;
-          L.polyline([[lat, lon], [endLat, endLon]], { color }).addTo(map);
+          // 彩色方位角線
+          L.polyline([[lat, lon], [endLat, endLon]], { color: color }).addTo(map);
         }
       });
 
