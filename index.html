@@ -190,13 +190,19 @@
         const bearing = parseFloat(p.bearing);
         if (!isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
           validLines.push(lineFromPointBearing(lat, lon, bearing));
-          const marker = L.marker([lat, lon]).addTo(map).bindPopup(
+          const marker = L.circleMarker([lat, lon], {
+            radius: 7,
+            color,
+            fillColor: color,
+            fillOpacity: 0.8
+          }).addTo(map).bindPopup(
             `觀測點 ${idx + 1}<br>座標: ${lat}, ${lon}<br>方位角: ${bearing}°`
           );
           const angle = bearingToRadians(bearing);
           const endLat = lat + Math.cos(angle) * 0.1;
           const endLon = lon + Math.sin(angle) * 0.1;
-          L.polyline([[lat, lon], [endLat, endLon]], { color: 'red' }).addTo(map);
+          const color = `hsl(${Math.round((bearing % 360))}, 80%, 50%)`;
+          L.polyline([[lat, lon], [endLat, endLon]], { color }).addTo(map);
         }
       });
 
@@ -284,6 +290,7 @@
       });
       if (currentPrediction) {
         text += `\n預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
+        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
       }
       text += `\n網址：${location.href}`;
 
