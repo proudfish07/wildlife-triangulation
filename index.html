@@ -57,6 +57,12 @@
     <button onclick="clearAllData()">清除所有資料</button>
     <button onclick="processInput()">交點計算</button>
     <button onclick="shareLocation()">分享預測位置</button>
+    <div style="margin: 0.5rem 0;">
+    <label style="display:inline-block; min-width: 6em;">病例編號</label>
+    <input id="caseIdInput" type="text" placeholder="例如：WO-2026-0001"
+           style="padding:0.3rem 0.5rem; width: 16em; max-width: 100%;"
+           oninput="saveCaseIdToStorage()">
+    </div>  
     <div class="example-block">
       範例：<br>
       <span>日期,時間,緯度,經度,方位角,gain,強度</span><br>
@@ -87,7 +93,21 @@
     let recordedPoints = [];
     let currentPrediction = null;
     let currentLocationCircle = null;
+    let caseId = '';
 
+    // 儲存病例編號
+    function saveCaseIdToStorage() {
+      const v = document.getElementById('caseIdInput').value.trim();
+      caseId = v;
+      localStorage.setItem('wildlife_case_id', caseId);
+    }
+    
+    // 載入病例編號
+    function loadCaseIdFromStorage() {
+      caseId = localStorage.getItem('wildlife_case_id') || '';
+      const el = document.getElementById('caseIdInput');
+      if (el) el.value = caseId;
+    }
     // 儲存到 localStorage
     function savePointsToStorage() {
       localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
@@ -105,12 +125,18 @@
       }
       renderInputTable();
     }
+    
 
     // 清除所有資料
     function clearAllData() {
       if (confirm('確定要清除所有資料嗎？此動作無法還原。')) {
         recordedPoints = [];
         localStorage.removeItem('wildlife_points');
+    
+        // ✅ 清掉病例編號（畫面 input）
+        const caseEl = document.getElementById('caseNo');
+        if (caseEl) caseEl.value = '';
+    
         renderInputTable();
         document.getElementById('pointTable').innerHTML = '';
         map.eachLayer(layer => {
@@ -120,6 +146,7 @@
         showCurrentLocationOnMap();
       }
     }
+
 
     // 渲染表格
     function renderInputTable() {
@@ -329,6 +356,7 @@
     }
 
     window.onload = function () {
+      loadCaseIdFromStorage();
       loadPointsFromStorage();
       showCurrentLocationOnMap();
     };
