@@ -54,7 +54,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  let subjects = JSON.parse(localStorage.getItem('wildlife_v20')) || [];
+  let subjects = JSON.parse(localStorage.getItem('wildlife_v25')) || [];
   let currentTarget = { sIdx: null, pIdx: null };
   let rawAngle = 0;
   let declination = -4.5;
@@ -65,7 +65,7 @@
   const map = L.map('map').setView([23.5, 121], 7);
   L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
 
-  function save() { localStorage.setItem('wildlife_v20', JSON.stringify(subjects)); updateMapDisplay(); }
+  function save() { localStorage.setItem('wildlife_v25', JSON.stringify(subjects)); updateMapDisplay(); }
 
   function addNewSubject() {
     subjects.push({ id: Date.now(), subjectId: '個體 ' + (subjects.length + 1), color: getSubjectColor(subjects.length), points: [createPoint()], prediction: null });
@@ -75,10 +75,6 @@
   function createPoint() {
     const now = new Date();
     return { date: now.toISOString().split('T')[0], time: now.toTimeString().split(' ')[0].substring(0, 5), lat: '', lon: '', bearing: '', gain: '', strength: '', note: '' };
-  }
-
-  function removePoint(sIdx, pIdx) {
-    if (confirm("確定刪除這條線？")) { subjects[sIdx].points.splice(pIdx, 1); render(); }
   }
 
   function render() {
@@ -100,7 +96,7 @@
               <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
               <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
             </div>
-            <button style="width:100%; margin-bottom:8px; background:#f0f0f0; border:1px solid #ccc; padding:8px; font-size:0.75rem;" onclick="getGPS(${sIdx},${pIdx})">📍 抓取 GPS</button>
+            <button style="width:100%; margin-bottom:8px; background:#f0f0f0; border:1px solid #ccc; padding:8px;" onclick="getGPS(${sIdx},${pIdx})">📍 抓取 GPS</button>
             <div class="input-row">
               <div style="grid-column: span 2; display:flex; gap:5px; align-items:flex-end;">
                 <div style="flex:1;">
@@ -115,11 +111,11 @@
               <div><label>強度</label><input type="text" value="${p.strength || ''}" onchange="upd(${sIdx},${pIdx},'strength',this.value)"></div>
             </div>
             <label style="margin-top:8px;">備註</label>
-            <input class="note-input" type="text" placeholder="輸入紀錄備註..." value="${p.note || ''}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
+            <input class="note-input" type="text" value="${p.note || ''}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
           </div>
         `).join('')}
         <button style="margin:10px 0; width:100%; border:2px dashed #ddd; background:none; padding:12px; border-radius:8px;" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增方位線</button>
-        ${s.prediction ? `<div class="prediction-box">🎯 預估位置：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
+        ${s.prediction ? `<div class="prediction-box">🎯 預估交點：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
         <div style="display:flex; gap:10px; margin-top:10px;">
           <button class="btn-calc" onclick="calculate(${sIdx})">📐 計算交點</button>
           <button class="btn-share" onclick="doShare(${sIdx})">📤 分享報告</button>
@@ -137,8 +133,8 @@
         if(p.lat && p.lon) {
           L.circleMarker([p.lat, p.lon], {radius: 6, color: s.color, fillColor: s.color, fillOpacity: 0.8}).addTo(map);
           if(p.bearing !== '') {
-            const rad = (90 - p.bearing) * Math.PI / 180;
-            const end = [parseFloat(p.lat) + Math.sin(rad)*0.04, parseFloat(p.lon) + Math.cos(rad)*0.04];
+            const angleRad = (90 - parseFloat(p.bearing)) * (Math.PI / 180);
+            const end = [parseFloat(p.lat) + Math.sin(angleRad)*0.04, parseFloat(p.lon) + Math.cos(angleRad)*0.04];
             L.polyline([[p.lat, p.lon], end], {color: getBearingColor(p.bearing), weight: 3, dashArray: '5, 8', opacity: 0.9}).addTo(map);
           }
         }
@@ -147,6 +143,7 @@
     });
   }
 
+  function removePoint(sIdx, pIdx) { if (confirm("確定刪除這條線？")) { subjects[sIdx].points.splice(pIdx, 1); render(); } }
   function delSub(sIdx) { if(confirm("刪除整個個體？")) { subjects.splice(sIdx, 1); render(); } }
   function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
 
@@ -155,9 +152,13 @@
     const p = subjects[sIdx].points[pIdx];
     declination = p.lat ? (p.lat > 23.5 ? -4.8 : -5.1) : -4.5;
     document.getElementById('manualDeclination').value = declination;
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission();
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') return alert("權限不足");
+    }
     document.getElementById('compassModal').style.display = 'flex';
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
   }
 
   function handleOrientation(event) {
@@ -170,13 +171,18 @@
     }
   }
 
+  function closeCompass() { 
+    document.getElementById('compassModal').style.display = 'none'; 
+    window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.removeEventListener('deviceorientation', handleOrientation, true);
+  }
+
   function lockCompass() {
     let corrected = (rawAngle + declination + 360) % 360;
     upd(currentTarget.sIdx, currentTarget.pIdx, 'bearing', Math.round(corrected));
     closeCompass(); render();
   }
 
-  function closeCompass() { document.getElementById('compassModal').style.display = 'none'; window.removeEventListener('deviceorientationabsolute', handleOrientation); }
   function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => { subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6); subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6); render(); }, null, {enableHighAccuracy: true}); }
 
   function calculate(sIdx) {
@@ -185,7 +191,7 @@
       const angleRad = (90 - parseFloat(p.bearing)) * (Math.PI / 180);
       return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.cos(angleRad), dy: Math.sin(angleRad) };
     });
-    if (lines.length < 2) return alert("至少需兩條方位線");
+    if (lines.length < 2) return alert("至少兩條線");
     let inters = [];
     for (let i = 0; i < lines.length; i++) {
       for (let j = i + 1; j < lines.length; j++) {
@@ -200,31 +206,19 @@
       const lat_avg = inters.reduce((sum, p) => sum + p[0], 0) / inters.length;
       const lon_avg = inters.reduce((sum, p) => sum + p[1], 0) / inters.length;
       s.prediction = { lat: lat_avg.toFixed(6), lon: lon_avg.toFixed(6) };
-      render();
-      map.setView([lat_avg, lon_avg], 15);
-    } else {
-      alert("無法找到交點");
+      render(); map.setView([lat_avg, lon_avg], 15);
     }
   }
 
   function doShare(idx) {
     const s = subjects[idx];
     let t = `【野生動物三角定位觀測紀錄】\n個體名稱：${s.subjectId}\n觀測資料（日期,時間,緯度,經度,方位角,gain,強度,備註）：\n`;
-    s.points.forEach((p, i) => {
-      t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain || ""},${p.strength || ""},${p.note || ""}\n`;
-    });
-    if(s.prediction) {
-      t += `\n預測位置：\n緯度: ${s.prediction.lat}, 經度: ${s.prediction.lon}\n`;
-      t += `Google地圖：https://www.google.com/maps/search/?api=1&query=${s.prediction.lat},${s.prediction.lon}`;
-    }
-    if (navigator.share) { navigator.share({ text: t }).catch(() => copyToClip(t)); } else { copyToClip(t); }
+    s.points.forEach((p, i) => t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain || ""},${p.strength || ""},${p.note || ""}\n`);
+    if(s.prediction) t += `\n🎯 預測位置：${s.prediction.lat}, ${s.prediction.lon}\nGoogle地圖：https://www.google.com/maps/search/?api=1&query=${s.prediction.lat},${s.prediction.lon}`;
+    if (navigator.share) navigator.share({ text: t }).catch(() => copyToClip(t)); else copyToClip(t);
   }
 
-  function copyToClip(text) {
-    const el = document.createElement('textarea'); el.value = text; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-    alert("內容已複製到剪貼簿！");
-  }
-
+  function copyToClip(text) { navigator.clipboard.writeText(text).then(() => alert("已複製到剪貼簿！")); }
   function resetAll() { if(confirm("重設所有資料？")) { localStorage.clear(); location.reload(); } }
   window.onload = render;
 </script>
