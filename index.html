@@ -2,430 +2,200 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wildlife Triangulation Tool</title>
-  <link rel="manifest" href="manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>野生動物追蹤定位系統</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body { margin: 0; font-family: sans-serif; }
-    #map { height: 60vh; }
-    .input-panel { padding: 1rem; }
-    .input-panel button { margin: 0.5rem 0.5rem 0.5rem 0; }
-    .input-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    .input-table th, .input-table td { padding: 0.5rem; border: 1px solid #ccc; text-align: center; }
-    .input-table input { width: 7em; }
-    .input-table .op-btn { width: 3em; }
-    .example-block { color: #666; font-size: 0.95em; margin-bottom: 0.5em; }
-    .example-block span { font-family: monospace; white-space: pre; }
-    .input-table input {
-      min-width: 4em;
-      max-width: 100%;
-      width: 100%;
-      box-sizing: border-box;
+    :root { --primary: #2c3e50; --accent: #d35400; --bg: #ecf0f1; }
+    body { margin: 0; font-family: -apple-system, sans-serif; background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
+    #map { height: 35vh; width: 100%; shrink: 0; z-index: 1; border-bottom: 2px solid #ccc; }
+    .content { flex: 1; overflow-y: auto; padding: 12px; padding-bottom: 100px; }
+    .subject-card {
+      background: white; border-radius: 12px; padding: 15px; margin-bottom: 25px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 8px solid var(--primary);
     }
-    @media (max-width: 600px) {
-      .input-panel {
-        padding: 0.5rem;
-      }
-      .input-table th, .input-table td {
-        padding: 0.25rem;
-        font-size: 0.9em;
-      }
-      .input-table input {
-        min-width: 2em;
-        font-size: 0.95em;
-        padding: 0.2em;
-      }
-      .input-panel button {
-        font-size: 0.9em;
-        padding: 0.3em 0.7em;
-      }
-    }
-    /* ===== 手機：表格改卡片式（不左右滑） ===== */
-    @media (max-width: 720px) {
-      .input-table {
-        display: table;           /* 回到正常 table 行為 */
-        white-space: normal;
-        overflow-x: visible;
-        min-width: 0;
-      }
-
-      .input-table thead { display: none; }
-
-      #inputTableBody tr {
-        display: block;
-        margin: 0.6rem 0;
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        padding: 0.6rem;
-        background: #fff;
-      }
-
-      #inputTableBody td {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        border: 0;
-        padding: 0.35rem 0;
-        text-align: left;
-      }
-
-      /* 左邊顯示欄名（用 data-label） */
-      #inputTableBody td::before {
-        content: attr(data-label);
-        flex: 0 0 6.5em;
-        font-weight: 700;
-        color: #444;
-      }
-
-      #inputTableBody td input {
-        width: 100%;
-        min-width: 0;
-      }
-
-      /* 操作按鈕那格 */
-      #inputTableBody td.op-btn {
-        justify-content: flex-end;
-      }
-    }
+    .subject-title-area { border-bottom: 2px solid #eee; margin-bottom: 15px; padding-bottom: 5px; }
+    .subject-id-label { font-size: 0.8rem; color: #7f8c8d; font-weight: bold; }
+    .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 100%; color: var(--primary); outline: none; background: transparent; }
+    .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 10px; position: relative; }
+    .obs-header { font-size: 0.85rem; font-weight: bold; color: #34495e; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .input-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    label { font-size: 0.7rem; color: #95a5a6; display: block; margin-bottom: 2px; }
+    input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
+    .btn-group { display: flex; gap: 8px; margin-top: 15px; }
+    button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
+    .btn-add-pt { background: #fff; color: #2c3e50; width: 100%; border: 2px dashed #bdc3c7; margin-top: 5px; }
+    .btn-calc { background: var(--accent); color: white; flex: 1; }
+    .btn-share { background: #2980b9; color: white; flex: 1; }
+    .btn-del-pt { background: #ffeeee; color: #e74c3c; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; }
+    .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; }
+    .prediction-box { background: #e8f8f0; color: #27ae60; padding: 10px; border-radius: 8px; margin-top: 10px; font-weight: bold; border: 1px solid #27ae60; font-size: 0.9rem; }
   </style>
 </head>
 <body>
-  <div class="input-panel">
-    <h2>觀測記錄與定位</h2>
-    <button onclick="recordPoint()">自動定位</button>
-    <button onclick="clearAllData()">清除所有資料</button>
-    <button onclick="processInput()">交點計算</button>
-    <button onclick="shareLocation()">分享預測位置</button>
-    <div style="margin: 0.5rem 0;">
-    <label style="display:inline-block; min-width: 6em;">病例編號</label>
-    <input id="caseIdInput" type="text" placeholder="例如：WO-2026-0001"
-           style="padding:0.3rem 0.5rem; width: 16em; max-width: 100%;"
-           oninput="saveCaseIdToStorage()">
-    </div>
-    <div class="example-block">
-      範例：<br>
-      <span>日期,時間,緯度,經度,方位角,gain,強度</span><br>
-      <span>2025-06-11,08:45:00,23.50000,121.00000,40,15,80</span>
-    </div>
-    <table class="input-table" id="inputTable">
-      <thead>
-        <tr>
-          <th>日期</th><th>時間</th><th>緯度</th><th>經度</th>
-          <th>方位角</th><th>gain</th><th>強度</th><th>操作</th>
-        </tr>
-      </thead>
-      <tbody id="inputTableBody"></tbody>
-    </table>
-    <!-- 計算結果不再顯示原資料明細 -->
-    <div id="pointTable"></div>
-  </div>
-  <div id="map"></div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([23.5, 121], 7);
-    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      attribution: 'Map data: &copy; OpenTopoMap (CC-BY-SA)',
-      maxZoom: 17
-    }).addTo(map);
+<div id="map"></div>
 
-    let recordedPoints = [];
-    let currentPrediction = null;
-    let currentLocationCircle = null;
-    let caseId = '';
+<div class="content" id="subjectContainer"></div>
 
-    // 儲存病例編號
-    function saveCaseIdToStorage() {
-      const v = document.getElementById('caseIdInput').value.trim();
-      caseId = v;
-      localStorage.setItem('wildlife_case_id', caseId);
-    }
+<div class="action-bar">
+  <button style="flex: 2; background: var(--primary); color: white;" onclick="addNewSubject()">➕ 新增追蹤病例</button>
+  <button style="flex: 1; background: #95a5a6; color: white;" onclick="resetAll()">重設</button>
+</div>
 
-    // 載入病例編號
-    function loadCaseIdFromStorage() {
-      caseId = localStorage.getItem('wildlife_case_id') || '';
-      const el = document.getElementById('caseIdInput');
-      if (el) el.value = caseId;
-    }
-    // 儲存到 localStorage
-    function savePointsToStorage() {
-      localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
-    }
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  let subjects = JSON.parse(localStorage.getItem('tracking_v5')) || [];
+  const map = L.map('map').setView([23.5, 121], 7);
+  L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
 
-    // 從 localStorage 載入
-    function loadPointsFromStorage() {
-      const data = localStorage.getItem('wildlife_points');
-      if (data) {
-        try {
-          recordedPoints = JSON.parse(data);
-        } catch (e) {
-          recordedPoints = [];
-        }
-      }
-      renderInputTable();
-    }
+  function save() {
+    localStorage.setItem('tracking_v5', JSON.stringify(subjects));
+    updateMapDisplay();
+  }
 
+  function addNewSubject() {
+    subjects.push({
+      id: Date.now(),
+      subjectId: '新病例 ' + (subjects.length + 1),
+      points: [ createPoint(), createPoint() ], // 預設給兩個點，方便兩點定位
+      prediction: null
+    });
+    render();
+  }
 
-    // 清除所有資料
-    function clearAllData() {
-      if (confirm('確定要清除所有資料嗎？此動作無法還原。')) {
-        recordedPoints = [];
-        localStorage.removeItem('wildlife_points');
-
-        // ✅ 清掉病例編號（畫面 input）
-        const caseEl = document.getElementById('caseNo');
-        if (caseEl) caseEl.value = '';
-
-        renderInputTable();
-        document.getElementById('pointTable').innerHTML = '';
-        map.eachLayer(layer => {
-          if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
-        });
-        currentPrediction = null;
-        showCurrentLocationOnMap();
-      }
-    }
-
-
-    // 渲染表格
-    function renderInputTable() {
-      const tbody = document.getElementById('inputTableBody');
-      tbody.innerHTML = '';
-      recordedPoints.forEach((p, idx) => {
-        const row = document.createElement('tr');
-        const fields = [
-          ['date', '日期'],
-          ['time', '時間'],
-          ['lat', '緯度'],
-          ['lon', '經度'],
-          ['bearing', '方位角'],
-          ['gain', 'gain'],
-          ['strength', '強度']
-        ];
-
-        fields.forEach(([key, label]) => {
-          const td = document.createElement('td');
-          td.dataset.label = label; // ✅ 這行就是讓手機顯示「日期：」「時間：」那個左側標籤
-
-          const input = document.createElement('input');
-          input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
-          if (key === 'lat' || key === 'lon') input.step = 'any';
-          input.value = (p[key]!==null && p[key]!==undefined) ? p[key] : '';
-          input.oninput = () => {
-            recordedPoints[idx][key] = input.value;
-            savePointsToStorage();
-          };
-
-          td.appendChild(input);
-          row.appendChild(td);
-        });
-
-        // 刪除按鈕
-        const tdDel = document.createElement('td');
-        tdDel.className = 'op-btn';
-        tdDel.dataset.label = '操作';
-        const btnDel = document.createElement('button');
-        btnDel.textContent = '刪除';
-        btnDel.onclick = () => {
-          recordedPoints.splice(idx,1);
-          savePointsToStorage();
-          renderInputTable();
-        };
-        tdDel.appendChild(btnDel);
-        row.appendChild(tdDel);
-        tbody.appendChild(row);
-      });
-    }
-
-    function bearingToRadians(b) {
-      return b * Math.PI / 180;
-    }
-
-    function lineFromPointBearing(lat, lon, bearing) {
-      const angle = bearingToRadians(bearing);
-      const dx = Math.sin(angle);
-      const dy = Math.cos(angle);
-      return { x: lon, y: lat, dx, dy, lat, lon, bearing };
-    }
-
-    function getIntersection(line1, line2) {
-      const { x: x1, y: y1, dx: dx1, dy: dy1 } = line1;
-      const { x: x2, y: y2, dx: dx2, dy: dy2 } = line2;
-      const det = dx1 * dy2 - dy1 * dx2;
-      if (Math.abs(det) < 1e-10) return null;
-      const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / det;
-      return [y1 + dy1 * t, x1 + dx1 * t];
-    }
-
-    function displayPointsAndCalculate(points) {
-      map.eachLayer(layer => {
-        if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
-      });
-      showCurrentLocationOnMap();
-
-      // 只放交點計算結果，不再重複呈現原資料
-      const validLines = [];
-      points.forEach((p, idx) => {
-        const lat = parseFloat(p.lat);
-        const lon = parseFloat(p.lon);
-        const bearing = parseFloat(p.bearing);
-        if (!isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
-          validLines.push(lineFromPointBearing(lat, lon, bearing));
-          // 用hsl的色相直接根據bearing決定顏色
-          const color = `hsl(${Math.round(bearing % 360)}, 80%, 50%)`;
-          const marker = L.circleMarker([lat, lon], {
-            radius: 7,
-            color: color,
-            fillColor: color,
-            fillOpacity: 0.9
-          }).addTo(map).bindPopup(
-            `觀測點 ${idx + 1}<br>座標: ${lat}, ${lon}<br>方位角: ${bearing}°`
-          );
-          const angle = bearingToRadians(bearing);
-          const endLat = lat + Math.cos(angle) * 0.1;
-          const endLon = lon + Math.sin(angle) * 0.1;
-          // 彩色方位角線
-          L.polyline([[lat, lon], [endLat, endLon]], { color: color }).addTo(map);
-        }
-      });
-
-      let intersections = [];
-      for (let i = 0; i < validLines.length; i++) {
-        for (let j = i + 1; j < validLines.length; j++) {
-          const inter = getIntersection(validLines[i], validLines[j]);
-          if (inter) intersections.push(inter);
-        }
-      }
-
-      if (intersections.length > 0) {
-        const avgLat = intersections.reduce((sum, p) => sum + p[0], 0) / intersections.length;
-        const avgLon = intersections.reduce((sum, p) => sum + p[1], 0) / intersections.length;
-        currentPrediction = { lat: avgLat, lon: avgLon };
-        L.marker([avgLat, avgLon], { color: 'blue' }).addTo(map)
-          .bindPopup(`預測位置<br>座標: ${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}`).openPopup();
-        map.setView([avgLat, avgLon], 13);
-
-        document.getElementById('pointTable').innerHTML =
-          `<div style="margin-top:1em;">交點平均位置：<br>緯度: ${avgLat.toFixed(5)}，經度: ${avgLon.toFixed(5)}</div>`;
-      } else {
-        currentPrediction = null;
-        document.getElementById('pointTable').innerHTML = '';
-      }
-    }
-
-    // 按下交點計算時
-    function processInput() {
-      // 先同步表格資料
-      const tableRows = document.querySelectorAll('#inputTableBody tr');
-      recordedPoints = Array.from(tableRows).map(tr => {
-        const tds = tr.querySelectorAll('td input');
-        return {
-          date: tds[0].value.trim(),
-          time: tds[1].value.trim(),
-          lat: tds[2].value.trim(),
-          lon: tds[3].value.trim(),
-          bearing: tds[4].value.trim(),
-          gain: tds[5].value.trim(),
-          strength: tds[6].value.trim()
-        }
-      });
-      savePointsToStorage();
-      displayPointsAndCalculate(recordedPoints);
-    }
-
-    // 手動定位按鈕
-    function recordPoint() {
-      if (!navigator.geolocation) {
-        alert('裝置不支援定位');
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(pos => {
-        const now = new Date();
-        const pad = n => n < 10 ? '0' + n : n;
-        const date = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
-        const time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        recordedPoints.push({
-          date: date,
-          time: time,
-          lat: pos.coords.latitude.toFixed(5),
-          lon: pos.coords.longitude.toFixed(5),
-          bearing: '',
-          gain: '',
-          strength: ''
-        });
-        savePointsToStorage();
-        renderInputTable();
-        alert(`已記錄座標：\n日期: ${date}\n時間: ${time}\n緯度: ${pos.coords.latitude.toFixed(5)}, 經度: ${pos.coords.longitude.toFixed(5)}\n請在表格輸入方位角、gain、強度`);
-        showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
-      }, () => alert('無法取得定位資訊'));
-    }
-
-    function shareLocation() {
-      if (!recordedPoints.length) {
-        alert('沒有觀測資料可分享');
-        return;
-      }
-      let text = '';
-      text += '【野生動物三角定位觀測紀錄】\n';
-      text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n';
-      recordedPoints.forEach((p, i) => {
-        text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''}\n`;
-      });
-      if (currentPrediction) {
-        text += `\n預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
-        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
-      }
-
-      // ✅ 產生「帶病例編號」的分享連結（不是必要，但你說你在談分享動作）
-      const shareUrl = caseNo
-        ? `${location.origin}${location.pathname}?caseNo=${encodeURIComponent(caseNo)}`
-        : location.href;
-
-      text += `\n網址：${location.href}`;
-
-      if (navigator.share) {
-        navigator.share({
-          title: '野生動物預測位置',
-          text,
-          url: location.href
-        }).catch(err => console.error('分享失敗', err));
-      } else {
-        prompt('請手動複製以下資訊分享：', text);
-      }
-    }
-
-    // 用藍色小圓點顯示目前位置
-    function showCurrentLocationOnMap(lat=null, lon=null) {
-      if (lat === null || lon === null) {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(pos => {
-            showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
-          });
-        }
-        return;
-      }
-      if (currentLocationCircle) {
-        map.removeLayer(currentLocationCircle);
-      }
-      currentLocationCircle = L.circleMarker([lat, lon], {
-        radius: 8,
-        color: '#007bff',
-        fillColor: '#339CFF',
-        fillOpacity: 0.8
-      }).addTo(map).bindPopup("你現在的位置").openPopup();
-    }
-
-    window.onload = function () {
-      loadCaseIdFromStorage();
-      loadPointsFromStorage();
-      showCurrentLocationOnMap();
+  function createPoint() {
+    const now = new Date();
+    return {
+      date: now.toISOString().split('T')[0],
+      time: now.toTimeString().split(' ')[0].substring(0, 5),
+      lat: '', lon: '', bearing: '', gain: '', strength: '', note: ''
     };
+  }
 
-    // PWA service worker 註冊（如需離線，請備妥 sw.js）
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
+  function getGPS(sIdx, pIdx) {
+    if (!navigator.geolocation) return alert("不支援 GPS");
+    navigator.geolocation.getCurrentPosition(pos => {
+      subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6);
+      subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6);
+      render();
+    }, () => alert("定位失敗"));
+  }
+
+  function render() {
+    const container = document.getElementById('subjectContainer');
+    container.innerHTML = '';
+    subjects.forEach((s, sIdx) => {
+      const card = document.createElement('div');
+      card.className = 'subject-card';
+      card.innerHTML = `
+        <div class="subject-title-area">
+          <div class="subject-id-label">病例編號 / 動物名稱</div>
+          <input class="subject-id-input" value="${s.subjectId}" onchange="subjects[${sIdx}].subjectId=this.value;save();">
+        </div>
+        ${s.points.map((p, pIdx) => `
+          <div class="obs-item">
+            <div class="obs-header">定位線條 #${pIdx + 1} <button class="btn-del-pt" onclick="delPt(${sIdx},${pIdx})">移除</button></div>
+            <div class="input-row">
+              <div><label>日期</label><input type="date" value="${p.date}" onchange="upd(${sIdx},${pIdx},'date',this.value)"></div>
+              <div><label>時間</label><input type="time" value="${p.time}" onchange="upd(${sIdx},${pIdx},'time',this.value)"></div>
+            </div>
+            <div class="input-row">
+              <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
+              <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
+            </div>
+            <button onclick="getGPS(${sIdx},${pIdx})" style="width:100%; margin-bottom:10px; font-size:0.7rem;">📍 獲取當前 GPS 座標</button>
+            <div class="input-row-3">
+              <div><label>方位角(°)</label><input type="number" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)"></div>
+              <div><label>Gain</label><input type="text" value="${p.gain}" onchange="upd(${sIdx},${pIdx},'gain',this.value)"></div>
+              <div><label>強度</label><input type="text" value="${p.strength}" onchange="upd(${sIdx},${pIdx},'strength',this.value)"></div>
+            </div>
+            <label>備註</label><input type="text" value="${p.note}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
+          </div>
+        `).join('')}
+        <button class="btn-add-pt" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增定位線</button>
+        <div class="btn-group">
+          <button class="btn-calc" onclick="calculate(${sIdx})">📐 執行定位計算</button>
+          <button class="btn-share" onclick="share(${sIdx})">📤 分享報告</button>
+        </div>
+        ${s.prediction ? `<div class="prediction-box">🎯 預測位置：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
+        <button style="width:100%; margin-top:10px; background:#f5f5f5; color:#999; font-size:0.7rem;" onclick="delSub(${sIdx})">刪除此病例</button>
+      `;
+      container.appendChild(card);
+    });
+    save();
+  }
+
+  function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
+  function delPt(sIdx, pIdx) { subjects[sIdx].points.splice(pIdx,1); render(); }
+  function delSub(sIdx) { if(confirm("確定刪除？")) { subjects.splice(sIdx,1); render(); } }
+
+  function calculate(sIdx) {
+    const s = subjects[sIdx];
+    const lines = s.points.filter(p => p.lat && p.lon && p.bearing !== '').map(p => {
+      const rad = p.bearing * Math.PI / 180;
+      return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.sin(rad), dy: Math.cos(rad) };
+    });
+
+    if (lines.length < 2) return alert("需要至少 2 條具備座標與方位角的線條。");
+
+    let inters = [];
+    for (let i = 0; i < lines.length; i++) {
+      for (let j = i + 1; j < lines.length; j++) {
+        const l1 = lines[i], l2 = lines[j];
+        const det = l1.dx * l2.dy - l1.dy * l2.dx;
+        if (Math.abs(det) > 1e-10) {
+          const t = ((l2.x - l1.x) * l2.dy - (l2.y - l1.y) * l2.dx) / det;
+          const intersectY = l1.y + l1.dy * t;
+          const intersectX = l1.x + l1.dx * t;
+          inters.push([intersectY, intersectX]);
+        }
+      }
     }
-  </script>
+
+    if (inters.length > 0) {
+      const avgLat = (inters.reduce((a, b) => a + b[0], 0) / inters.length).toFixed(6);
+      const avgLon = (inters.reduce((a, b) => a + b[1], 0) / inters.length).toFixed(6);
+      s.prediction = { lat: avgLat, lon: avgLon };
+      render();
+      map.setView([avgLat, avgLon], 14);
+    } else { alert("線條平行，無法產生交點。"); }
+  }
+
+  function updateMapDisplay() {
+    map.eachLayer(l => { if(l instanceof L.Marker || l instanceof L.Polyline) map.removeLayer(l); });
+    subjects.forEach(s => {
+      s.points.forEach(p => {
+        if(p.lat && p.lon) {
+          L.circleMarker([p.lat, p.lon], {radius: 5, color: '#2980b9'}).addTo(map);
+          if(p.bearing) {
+            const rad = p.bearing * Math.PI / 180;
+            const end = [parseFloat(p.lat) + Math.cos(rad)*0.015, parseFloat(p.lon) + Math.sin(rad)*0.015];
+            L.polyline([[p.lat, p.lon], end], {color: '#3498db', weight: 2, dashArray: '4'}).addTo(map);
+          }
+        }
+      });
+      if(s.prediction) L.marker([s.prediction.lat, s.prediction.lon]).addTo(map).bindPopup(s.subjectId).openPopup();
+    });
+  }
+
+  function share(idx) {
+    const s = subjects[idx];
+    let t = `【野生動物追蹤：${s.subjectId}】\n\n`;
+    s.points.forEach((p, i) => {
+      t += `#${i+1}線: ${p.date} ${p.time}\n座標: ${p.lat}, ${p.lon}\n方位: ${p.bearing}°, Gain: ${p.gain}, 強度: ${p.strength}\n備註: ${p.note}\n\n`;
+    });
+    if(s.prediction) {
+      t += `🎯 預測交點: ${s.prediction.lat}, ${s.prediction.lon}\n`;
+      t += `地圖連結: https://www.google.com/maps?q=${s.prediction.lat},${s.prediction.lon}\n`;
+    }
+    if (navigator.share) navigator.share({ text: t }); else alert("請手動複製控制台內容");
+    console.log(t);
+  }
+
+  function resetAll() { if(confirm("重設所有資料？")) { localStorage.clear(); location.reload(); } }
+  window.onload = render;
+</script>
 </body>
 </html>
