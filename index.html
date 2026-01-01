@@ -19,6 +19,8 @@
     
     .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 70%; color: var(--subject-color); outline: none; background: transparent; border-bottom: 1px dashed #ccc; }
     .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 10px; position: relative; }
+    
+    /* 刪除線段按鈕樣式 */
     .btn-del-line { position: absolute; top: 8px; right: 8px; background: #fee; color: #e74c3c; border: 1px solid #fcc; border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; cursor: pointer; }
     
     .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
@@ -33,8 +35,9 @@
     .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; z-index: 1000; }
     .prediction-box { background: #f0f0f0; color: var(--subject-color); padding: 10px; border-radius: 8px; margin: 10px 0; font-weight: bold; border: 2px solid var(--subject-color); }
     
+    /* 羅盤視覺修正 */
     #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
-    .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; }
+    .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; transition: transform 0.1s ease-out; }
     .bearing-indicator { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
   </style>
 </head>
@@ -50,7 +53,10 @@
 
 <div id="compassModal">
   <h3>方位讀取 (真北補正)</h3>
-  <div class="compass-disc" id="compassDisc"><div style="position:absolute; top:0; left:50%; width:2px; height:100%; background:white; transform:translateX(-50%);"></div></div>
+  <div class="compass-disc" id="compassDisc">
+    <div style="position:absolute; top:0; left:50%; width:2px; height:100%; background:white; transform:translateX(-50%);"></div>
+    <div style="position:absolute; top:5px; left:50%; transform:translateX(-50%); font-weight:bold;">N</div>
+  </div>
   <h2 id="liveAngle" style="font-size: 3rem; margin: 10px 0;">0°</h2>
   <input type="number" id="manualDeclination" value="-4.5" step="0.1" style="width:80px; text-align:center;" onchange="updateDeclination(this.value)">
   <button onclick="lockCompass()" style="background:var(--accent); color:white; padding:15px 50px; border-radius:30px; margin-top:20px;">鎖定角度</button>
@@ -72,18 +78,10 @@
 
   function save() { localStorage.setItem('tracking_v12', JSON.stringify(subjects)); updateMapDisplay(); }
 
-  // 自動抓取磁偏角邏輯
-  function getAutoDeclination(lat, lon) {
-    if(!lat || !lon) return -4.5;
-    if(lat > 24) return -4.7;
-    if(lat < 23) return -5.1;
-    return -4.9;
-  }
-
   function addNewSubject() {
     subjects.push({ 
       id: Date.now(), 
-      subjectId: '個體 ' + (subjects.length + 1), 
+      subjectId: '病例 ' + (subjects.length + 1), 
       color: getSubjectColor(subjects.length),
       points: [createPoint(), createPoint()], 
       prediction: null 
@@ -110,7 +108,7 @@
         </div>
         ${s.points.map((p, pIdx) => `
           <div class="obs-item">
-            <button class="btn-del-line" onclick="delLine(${sIdx}, ${pIdx})">✕ 刪除線</button>
+            <button class="btn-del-line" onclick="delLine(${sIdx}, ${pIdx})">✕</button>
             <div class="input-row">
               <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
               <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
@@ -132,7 +130,7 @@
             <label style="margin-top:5px;">備註</label><input type="text" value="${p.note}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
           </div>
         `).join('')}
-        <button class="btn-add-pt" style="margin:10px 0; width:100%; border:1px dashed #ccc; background:none; padding:10px; border-radius:8px;" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增定位線</button>
+        <button style="margin:10px 0; width:100%; border:1px dashed #ccc; background:none; padding:10px; border-radius:8px;" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增定位線</button>
         ${s.prediction ? `<div class="prediction-box">🎯 預測位置：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
         <div style="display:flex; gap:10px;">
           <button class="btn-calc" onclick="calculate(${sIdx})">📐 計算定位</button>
@@ -147,44 +145,47 @@
   function updateMapDisplay() {
     map.eachLayer(l => { if(l instanceof L.Marker || l instanceof L.Polyline || l instanceof L.CircleMarker) map.removeLayer(l); });
     subjects.forEach(s => {
-      const sColor = s.color || '#333';
       s.points.forEach(p => {
         if(p.lat && p.lon) {
-          L.circleMarker([p.lat, p.lon], {radius: 6, color: sColor, fillColor: sColor, fillOpacity: 0.6}).addTo(map);
+          L.circleMarker([p.lat, p.lon], {radius: 6, color: s.color, fillOpacity: 0.6}).addTo(map);
           if(p.bearing !== '') {
-            const bColor = getBearingColor(p.bearing);
             const rad = (90 - p.bearing) * Math.PI / 180;
             const end = [parseFloat(p.lat) + Math.sin(rad)*0.03, parseFloat(p.lon) + Math.cos(rad)*0.03];
-            L.polyline([[p.lat, p.lon], end], {color: bColor, weight: 3, dashArray: '5, 8', opacity: 0.8}).addTo(map);
+            L.polyline([[p.lat, p.lon], end], {color: getBearingColor(p.bearing), weight: 3, dashArray: '5, 8'}).addTo(map);
           }
         }
       });
-      if(s.prediction) {
-        L.marker([s.prediction.lat, s.prediction.lon]).addTo(map).bindPopup(s.subjectId).openPopup();
-      }
+      if(s.prediction) L.marker([s.prediction.lat, s.prediction.lon]).addTo(map).bindPopup(s.subjectId).openPopup();
     });
   }
 
-  // --- 刪除特定定位線函式 ---
-  function delLine(sIdx, pIdx) {
-    if(confirm("確定刪除此條定位方位線？")) {
-      subjects[sIdx].points.splice(pIdx, 1);
+  // --- 刪除與更新功能 ---
+  function delLine(sIdx, pIdx) { if(confirm("確定刪除此線？")) { subjects[sIdx].points.splice(pIdx, 1); render(); } }
+  function delSub(sIdx) { if(confirm("刪除此病例？")) { subjects.splice(sIdx,1); render(); } }
+  function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
+  function updateDeclination(val) { declination = parseFloat(val); }
+
+  function getGPS(sIdx, pIdx) { 
+    navigator.geolocation.getCurrentPosition(pos => {
+      subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6);
+      subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6);
+      // 自動根據緯度調整磁偏角預設值
+      declination = pos.coords.latitude > 23.5 ? -4.8 : -5.1; 
+      document.getElementById('manualDeclination').value = declination;
       render();
-    }
+    }, err => alert("定位失敗"), {enableHighAccuracy: true}); 
   }
 
+  // --- 羅盤邏輯 (修正轉動問題) ---
   async function openCompass(sIdx, pIdx) {
     currentTarget = { sIdx, pIdx };
-    const p = subjects[sIdx].points[pIdx];
-    declination = getAutoDeclination(p.lat, p.lon);
-    document.getElementById('manualDeclination').value = declination;
-
     if (typeof DeviceOrientationEvent.requestPermission === 'function') {
       const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission !== 'granted') return alert("需權限");
+      if (permission !== 'granted') return alert("需羅盤權限");
     }
     document.getElementById('compassModal').style.display = 'flex';
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
   }
 
   function handleOrientation(event) {
@@ -193,37 +194,31 @@
       rawAngle = heading;
       let corrected = (rawAngle + declination + 360) % 360;
       document.getElementById('liveAngle').innerText = Math.round(corrected) + "°";
+      // 指北針碟盤旋轉修正
       document.getElementById('compassDisc').style.transform = `rotate(${-corrected}deg)`;
     }
   }
 
-  function updateDeclination(val) { declination = parseFloat(val); }
   function lockCompass() {
     let corrected = (rawAngle + declination + 360) % 360;
     upd(currentTarget.sIdx, currentTarget.pIdx, 'bearing', Math.round(corrected));
     closeCompass(); render();
   }
+
   function closeCompass() {
     document.getElementById('compassModal').style.display = 'none';
     window.removeEventListener('deviceorientationabsolute', handleOrientation);
-  }
-  function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
-  function delSub(sIdx) { if(confirm("刪除此記錄？")) { subjects.splice(sIdx,1); render(); } }
-  function getGPS(sIdx, pIdx) { 
-    navigator.geolocation.getCurrentPosition(pos => {
-      subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6);
-      subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6);
-      render();
-    }, err => alert("無法取得位置"), {enableHighAccuracy: true}); 
+    window.removeEventListener('deviceorientation', handleOrientation);
   }
 
+  // --- 計算與分享 ---
   function calculate(sIdx) {
     const s = subjects[sIdx];
     const lines = s.points.filter(p => p.lat && p.lon && p.bearing !== '').map(p => {
       const rad = (90 - p.bearing) * Math.PI / 180;
       return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.cos(rad), dy: Math.sin(rad) };
     });
-    if (lines.length < 2) return alert("至少需兩條方位線");
+    if (lines.length < 2) return alert("至少需兩條線");
     let inters = [];
     for (let i = 0; i < lines.length; i++) {
       for (let j = i + 1; j < lines.length; j++) {
@@ -246,27 +241,10 @@
 
   function share(idx) {
     const s = subjects[idx];
-    let t = `【野生動物三角定位觀測紀錄】\n`;
-    t += `個體編號：${s.subjectId}\n\n`;
-    t += `觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n`;
-    s.points.forEach((p, i) => {
-      t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain},${p.strength}\n`;
-    });
-    if(s.prediction) {
-      t += `\n預測位置：\n緯度: ${s.prediction.lat}, 經度: ${s.prediction.lon}\n`;
-      t += `Google地圖：https://www.google.com/search?q=https://www.google.com/maps%3Fq%3D22.7562,121.1481{s.prediction.lat},${s.prediction.lon}`;
-    }
-    if (navigator.share) navigator.share({ title: '追蹤報告', text: t }).catch(err => copyToClipboard(t));
-    else { copyToClipboard(t); alert("已複製至剪貼簿！"); }
-  }
-
-  function copyToClipboard(text) {
-    const el = document.createElement('textarea');
-    el.value = text;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
+    let t = `【野生動物三角定位觀測紀錄】\n個體：${s.subjectId}\n\n觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n`;
+    s.points.forEach((p, i) => t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain},${p.strength}\n`);
+    if(s.prediction) t += `\n🎯 預測位置：${s.prediction.lat}, ${s.prediction.lon}\nGoogle地圖：https://www.google.com/search?q=https://www.google.com/maps%3Fq%3D22.7565,121.1485{s.prediction.lat},${s.prediction.lon}`;
+    if (navigator.share) navigator.share({ text: t }); else { navigator.clipboard.writeText(t); alert("已複製！"); }
   }
 
   function resetAll() { if(confirm("確定重設所有資料？")) { localStorage.clear(); location.reload(); } }
