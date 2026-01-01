@@ -321,6 +321,12 @@
         text += `\n預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
         text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
       }
+
+      // ✅ 產生「帶病例編號」的分享連結（不是必要，但你說你在談分享動作）
+      const shareUrl = caseNo
+        ? `${location.origin}${location.pathname}?caseNo=${encodeURIComponent(caseNo)}`
+        : location.href;
+
       text += `\n網址：${location.href}`;
 
       if (navigator.share) {
