@@ -314,37 +314,31 @@
         alert('沒有觀測資料可分享');
         return;
       }
+    
       let text = '';
       text += '【野生動物三角定位觀測紀錄】\n';
+    
+      if (caseId) {
+        text += `病例編號：${caseId}\n`;
+      }
+    
       text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n';
       recordedPoints.forEach((p, i) => {
-        text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''}\n`;
+        text += `${i+1}. ${p.date||''},${p.time||''},${p.lat||''},${p.lon||''},${p.bearing||''},${p.gain||''},${p.strength||''}\n`;
       });
+    
       if (currentPrediction) {
-        text += `\n預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
-        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
-      }
-
-      // ✅ 產生「帶病例編號」的分享連結（不是必要，但你說你在談分享動作）
-      const shareUrl = caseId
-        ? `${location.origin}${location.pathname}?caseId=${encodeURIComponent(caseId)}`
-        : location.href;
-      
-      text += `\n病例編號：${caseId || '(未填)'}\n`;
-      text += `\n網址：${shareUrl}`;
-
-      text += `\n網址：${location.href}`;
-
-      if (navigator.share) {
-        navigator.share({
-          title: '野生動物預測位置',
-          text,
-          url: shareUrl
-        }).catch(err => console.error('分享失敗', err));
+        text += `\n預測位置：\n`;
+        text += `緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
+        text += `Google 地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
       } else {
-        prompt('請手動複製以下資訊分享：', text);
+        text += `\n（尚未計算預測位置）\n`;
       }
+    
+      // ✅ 區網 http 不能用系統分享 → 一定跳出可複製視窗
+      prompt('請複製以下內容分享：', text);
     }
+
 
     // 用藍色小圓點顯示目前位置
     function showCurrentLocationOnMap(lat=null, lon=null) {
