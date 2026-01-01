@@ -8,79 +8,68 @@
   <style>
     :root { --primary: #2c3e50; --accent: #d35400; --bg: #ecf0f1; }
     body { margin: 0; font-family: -apple-system, sans-serif; background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
-    #map { height: 35vh; width: 100%; shrink: 0; z-index: 1; border-bottom: 2px solid #ccc; }
+    #map { height: 30vh; width: 100%; shrink: 0; z-index: 1; border-bottom: 2px solid #ccc; }
     .content { flex: 1; overflow-y: auto; padding: 12px; padding-bottom: 100px; }
-    .subject-card {
-      background: white; border-radius: 12px; padding: 15px; margin-bottom: 25px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 8px solid var(--primary);
-    }
+    .subject-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 8px solid var(--primary); }
     .subject-title-area { border-bottom: 2px solid #eee; margin-bottom: 15px; padding-bottom: 5px; }
-    .subject-id-label { font-size: 0.8rem; color: #7f8c8d; font-weight: bold; }
     .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 100%; color: var(--primary); outline: none; background: transparent; }
     .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 10px; position: relative; }
-    .obs-header { font-size: 0.85rem; font-weight: bold; color: #34495e; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
     .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-    .input-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .bearing-group { display: flex; gap: 5px; align-items: flex-end; }
     label { font-size: 0.7rem; color: #95a5a6; display: block; margin-bottom: 2px; }
     input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
-    .btn-group { display: flex; gap: 8px; margin-top: 15px; }
     button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
-    .btn-add-pt { background: #fff; color: #2c3e50; width: 100%; border: 2px dashed #bdc3c7; margin-top: 5px; }
+    .btn-gps { width: 100%; margin-bottom: 10px; font-size: 0.75rem; background: #eee; }
+    .btn-compass { background: #34495e; color: white; padding: 8px; width: 45px; height: 38px; display: flex; align-items: center; justify-content: center; }
     .btn-calc { background: var(--accent); color: white; flex: 1; }
     .btn-share { background: #2980b9; color: white; flex: 1; }
-    .btn-del-pt { background: #ffeeee; color: #e74c3c; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; }
-    .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; }
-    .prediction-box { background: #e8f8f0; color: #27ae60; padding: 10px; border-radius: 8px; margin-top: 10px; font-weight: bold; border: 1px solid #27ae60; font-size: 0.9rem; }
+    .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; z-index: 1000; }
+    .prediction-box { background: #e8f8f0; color: #27ae60; padding: 10px; border-radius: 8px; margin-top: 10px; font-weight: bold; border: 1px solid #27ae60; }
+    /* 羅盤彈窗 */
+    #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
+    .compass-disc { width: 200px; height: 200px; border: 4px solid white; border-radius: 50%; position: relative; transition: transform 0.1s; margin: 20px; }
+    .compass-arrow { position: absolute; top: 0; left: 50%; width: 4px; height: 50%; background: red; transform: translateX(-200%); }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
-
 <div class="content" id="subjectContainer"></div>
 
 <div class="action-bar">
-  <button style="flex: 2; background: var(--primary); color: white;" onclick="addNewSubject()">➕ 新增追蹤病例</button>
+  <button style="flex: 2; background: var(--primary); color: white;" onclick="addNewSubject()">➕ 新增病例</button>
   <button style="flex: 1; background: #95a5a6; color: white;" onclick="resetAll()">重設</button>
+</div>
+
+<div id="compassModal">
+  <h3>請將手機水平對準天線指向</h3>
+  <div class="compass-disc" id="compassDisc">
+    <div class="compass-arrow"></div>
+  </div>
+  <h2 id="liveAngle">0°</h2>
+  <button onclick="lockCompass()" style="background:var(--accent); color:white; padding:15px 40px;">鎖定並填入角度</button>
+  <button onclick="closeCompass()" style="background:none; color:white; margin-top:20px;">取消</button>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  let subjects = JSON.parse(localStorage.getItem('tracking_v5')) || [];
+  let subjects = JSON.parse(localStorage.getItem('tracking_v6')) || [];
+  let currentTarget = { sIdx: null, pIdx: null };
+  let currentAngle = 0;
+
   const map = L.map('map').setView([23.5, 121], 7);
   L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
 
-  function save() {
-    localStorage.setItem('tracking_v5', JSON.stringify(subjects));
-    updateMapDisplay();
-  }
+  function save() { localStorage.setItem('tracking_v6', JSON.stringify(subjects)); updateMapDisplay(); }
 
   function addNewSubject() {
-    subjects.push({
-      id: Date.now(),
-      subjectId: '新病例 ' + (subjects.length + 1),
-      points: [ createPoint(), createPoint() ], // 預設給兩個點，方便兩點定位
-      prediction: null
-    });
+    subjects.push({ id: Date.now(), subjectId: '新病例 ' + (subjects.length + 1), points: [createPoint(), createPoint()], prediction: null });
     render();
   }
 
   function createPoint() {
     const now = new Date();
-    return {
-      date: now.toISOString().split('T')[0],
-      time: now.toTimeString().split(' ')[0].substring(0, 5),
-      lat: '', lon: '', bearing: '', gain: '', strength: '', note: ''
-    };
-  }
-
-  function getGPS(sIdx, pIdx) {
-    if (!navigator.geolocation) return alert("不支援 GPS");
-    navigator.geolocation.getCurrentPosition(pos => {
-      subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6);
-      subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6);
-      render();
-    }, () => alert("定位失敗"));
+    return { date: now.toISOString().split('T')[0], time: now.toTimeString().split(' ')[0].substring(0, 5), lat: '', lon: '', bearing: '', gain: '', strength: '', note: '' };
   }
 
   function render() {
@@ -91,45 +80,83 @@
       card.className = 'subject-card';
       card.innerHTML = `
         <div class="subject-title-area">
-          <div class="subject-id-label">病例編號 / 動物名稱</div>
           <input class="subject-id-input" value="${s.subjectId}" onchange="subjects[${sIdx}].subjectId=this.value;save();">
         </div>
         ${s.points.map((p, pIdx) => `
           <div class="obs-item">
-            <div class="obs-header">定位線條 #${pIdx + 1} <button class="btn-del-pt" onclick="delPt(${sIdx},${pIdx})">移除</button></div>
-            <div class="input-row">
-              <div><label>日期</label><input type="date" value="${p.date}" onchange="upd(${sIdx},${pIdx},'date',this.value)"></div>
-              <div><label>時間</label><input type="time" value="${p.time}" onchange="upd(${sIdx},${pIdx},'time',this.value)"></div>
-            </div>
+            <div class="obs-header">線條 #${pIdx + 1} <button onclick="subjects[${sIdx}].points.splice(${pIdx},1);render();" style="color:red; background:none; font-size:12px;">刪除</button></div>
             <div class="input-row">
               <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
               <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
             </div>
-            <button onclick="getGPS(${sIdx},${pIdx})" style="width:100%; margin-bottom:10px; font-size:0.7rem;">📍 獲取當前 GPS 座標</button>
-            <div class="input-row-3">
-              <div><label>方位角(°)</label><input type="number" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)"></div>
-              <div><label>Gain</label><input type="text" value="${p.gain}" onchange="upd(${sIdx},${pIdx},'gain',this.value)"></div>
-              <div><label>強度</label><input type="text" value="${p.strength}" onchange="upd(${sIdx},${pIdx},'strength',this.value)"></div>
+            <button class="btn-gps" onclick="getGPS(${sIdx},${pIdx})">📍 獲取當前 GPS</button>
+            <div class="input-row">
+              <div class="bearing-group" style="grid-column: span 2;">
+                <div style="flex:1;"><label>方位角(°)</label><input type="number" id="bearing-${sIdx}-${pIdx}" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)"></div>
+                <button class="btn-compass" onclick="openCompass(${sIdx},${pIdx})">🧭</button>
+              </div>
             </div>
-            <label>備註</label><input type="text" value="${p.note}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
+            <div class="input-row" style="margin-top:8px;">
+               <div><label>Gain</label><input type="text" value="${p.gain}" onchange="upd(${sIdx},${pIdx},'gain',this.value)"></div>
+               <div><label>強度</label><input type="text" value="${p.strength}" onchange="upd(${sIdx},${pIdx},'strength',this.value)"></div>
+            </div>
+            <label style="margin-top:8px;">備註</label><input type="text" value="${p.note}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
           </div>
         `).join('')}
         <button class="btn-add-pt" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增定位線</button>
         <div class="btn-group">
-          <button class="btn-calc" onclick="calculate(${sIdx})">📐 執行定位計算</button>
+          <button class="btn-calc" onclick="calculate(${sIdx})">📐 定位計算</button>
           <button class="btn-share" onclick="share(${sIdx})">📤 分享報告</button>
         </div>
         ${s.prediction ? `<div class="prediction-box">🎯 預測位置：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
-        <button style="width:100%; margin-top:10px; background:#f5f5f5; color:#999; font-size:0.7rem;" onclick="delSub(${sIdx})">刪除此病例</button>
       `;
       container.appendChild(card);
     });
     save();
   }
 
+  // --- 羅盤邏輯 ---
+  async function openCompass(sIdx, pIdx) {
+    currentTarget = { sIdx, pIdx };
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') return alert("需要權限才能使用羅盤");
+    }
+    document.getElementById('compassModal').style.display = 'flex';
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    // 針對 iOS
+    window.addEventListener('deviceorientation', handleOrientation, true);
+  }
+
+  function handleOrientation(event) {
+    // 優先使用 webkitCompassHeading (iOS) 或 alpha (Android)
+    let heading = event.webkitCompassHeading || (360 - event.alpha);
+    if (heading) {
+      currentAngle = Math.round(heading);
+      document.getElementById('liveAngle').innerText = currentAngle + "°";
+      document.getElementById('compassDisc').style.transform = `rotate(${-currentAngle}deg)`;
+    }
+  }
+
+  function lockCompass() {
+    upd(currentTarget.sIdx, currentTarget.pIdx, 'bearing', currentAngle);
+    closeCompass();
+    render();
+  }
+
+  function closeCompass() {
+    document.getElementById('compassModal').style.display = 'none';
+    window.removeEventListener('deviceorientationabsolute', handleOrientation);
+    window.removeEventListener('deviceorientation', handleOrientation);
+  }
+
+  // --- 基礎功能 ---
   function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
-  function delPt(sIdx, pIdx) { subjects[sIdx].points.splice(pIdx,1); render(); }
-  function delSub(sIdx) { if(confirm("確定刪除？")) { subjects.splice(sIdx,1); render(); } }
+  function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => {
+    subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6);
+    subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6);
+    render();
+  }); }
 
   function calculate(sIdx) {
     const s = subjects[sIdx];
@@ -137,9 +164,7 @@
       const rad = p.bearing * Math.PI / 180;
       return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.sin(rad), dy: Math.cos(rad) };
     });
-
-    if (lines.length < 2) return alert("需要至少 2 條具備座標與方位角的線條。");
-
+    if (lines.length < 2) return alert("至少需兩條線");
     let inters = [];
     for (let i = 0; i < lines.length; i++) {
       for (let j = i + 1; j < lines.length; j++) {
@@ -147,20 +172,15 @@
         const det = l1.dx * l2.dy - l1.dy * l2.dx;
         if (Math.abs(det) > 1e-10) {
           const t = ((l2.x - l1.x) * l2.dy - (l2.y - l1.y) * l2.dx) / det;
-          const intersectY = l1.y + l1.dy * t;
-          const intersectX = l1.x + l1.dx * t;
-          inters.push([intersectY, intersectX]);
+          inters.push([l1.y + l1.dy * t, l1.x + l1.dx * t]);
         }
       }
     }
-
     if (inters.length > 0) {
-      const avgLat = (inters.reduce((a, b) => a + b[0], 0) / inters.length).toFixed(6);
-      const avgLon = (inters.reduce((a, b) => a + b[1], 0) / inters.length).toFixed(6);
-      s.prediction = { lat: avgLat, lon: avgLon };
+      s.prediction = { lat: (inters.reduce((a, b) => a + b[0], 0) / inters.length).toFixed(6), lon: (inters.reduce((a, b) => a + b[1], 0) / inters.length).toFixed(6) };
       render();
-      map.setView([avgLat, avgLon], 14);
-    } else { alert("線條平行，無法產生交點。"); }
+      map.setView([s.prediction.lat, s.prediction.lon], 14);
+    }
   }
 
   function updateMapDisplay() {
@@ -182,19 +202,13 @@
 
   function share(idx) {
     const s = subjects[idx];
-    let t = `【野生動物追蹤：${s.subjectId}】\n\n`;
-    s.points.forEach((p, i) => {
-      t += `#${i+1}線: ${p.date} ${p.time}\n座標: ${p.lat}, ${p.lon}\n方位: ${p.bearing}°, Gain: ${p.gain}, 強度: ${p.strength}\n備註: ${p.note}\n\n`;
-    });
-    if(s.prediction) {
-      t += `🎯 預測交點: ${s.prediction.lat}, ${s.prediction.lon}\n`;
-      t += `地圖連結: https://www.google.com/maps?q=${s.prediction.lat},${s.prediction.lon}\n`;
-    }
-    if (navigator.share) navigator.share({ text: t }); else alert("請手動複製控制台內容");
-    console.log(t);
+    let t = `【追蹤：${s.subjectId}】\n`;
+    s.points.forEach((p, i) => t += `#${i+1}: ${p.lat},${p.lon} | ${p.bearing}° | G:${p.gain} S:${p.strength}\n`);
+    if(s.prediction) t += `🎯 預測: ${s.prediction.lat}, ${s.prediction.lon}\n連結: https://www.google.com/maps?q=$${s.prediction.lat},${s.prediction.lon}`;
+    navigator.share ? navigator.share({ text: t }) : alert("請手動複製");
   }
 
-  function resetAll() { if(confirm("重設所有資料？")) { localStorage.clear(); location.reload(); } }
+  function resetAll() { if(confirm("重設？")) { localStorage.clear(); location.reload(); } }
   window.onload = render;
 </script>
 </body>
