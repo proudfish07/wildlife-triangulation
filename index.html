@@ -195,25 +195,19 @@
           inters.push([l1.y + l1.dy * t, l1.x + l1.dx * t]);
         }
       }
-    // 這是執行您要求的：交點平均法 (Centroid of Intersections)
+    } // <--- 修正：原本這行括號在最後，現在要移到這裡結束迴圈
+
     if (inters.length > 0) {
-        // 1. 計算所有交點緯度的總和並除以數量 (n)
         const lat_avg = inters.reduce((sum, p) => sum + p[0], 0) / inters.length;
-        
-        // 2. 計算所有交點經度的總和並除以數量 (n)
         const lon_avg = inters.reduce((sum, p) => sum + p[1], 0) / inters.length;
-    
-        // 3. 將結果存入預測位置 (保留 6 位小數)
         subjects[sIdx].prediction = { 
             lat: lat_avg.toFixed(6), 
             lon: lon_avg.toFixed(6) 
           };
-    
-        // 4. 更新介面並將地圖中心移至預測點
         render(); 
         map.setView([lat_avg, lon_avg], 15);
     }
-  }
+  } // <--- 這是函式的結束括號
 
   function doShare(idx) {
     const s = subjects[idx];
