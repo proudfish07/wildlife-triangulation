@@ -137,8 +137,16 @@
         if(p.lat && p.lon) {
           L.circleMarker([p.lat, p.lon], {radius: 6, color: s.color, fillColor: s.color, fillOpacity: 0.8}).addTo(map);
           if(p.bearing !== '') {
+            // 修正：地理方位角轉弧度 (90 - bearing 是為了將北 0 度順時針轉為數學標準)
             const rad = (90 - p.bearing) * Math.PI / 180;
-            const end = [parseFloat(p.lat) + Math.sin(rad)*0.04, parseFloat(p.lon) + Math.cos(rad)*0.04];
+            
+            // 修正：dx 應該對應 Cosine (經度方向), dy 應該對應 Sine (緯度方向)
+            return { 
+                x: parseFloat(p.lon), 
+                y: parseFloat(p.lat), 
+                dx: Math.cos(rad), 
+                dy: Math.sin(rad) 
+            };
             L.polyline([[p.lat, p.lon], end], {color: getBearingColor(p.bearing), weight: 3, dashArray: '5, 8', opacity: 0.9}).addTo(map);
           }
         }
