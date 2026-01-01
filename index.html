@@ -13,7 +13,8 @@
     .subject-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 8px solid var(--subject-color); position: relative; }
     .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 70%; color: var(--subject-color); outline: none; background: transparent; border-bottom: 1px dashed #ccc; }
     .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 10px; position: relative; }
-    .btn-del-line { position: absolute; top: 8px; right: 8px; background: #fee; color: #e74c3c; border: 1px solid #fcc; border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; cursor: pointer; }
+    /* 刪除線按鈕樣式 */
+    .btn-del-line { position: absolute; top: -8px; right: -8px; background: #e74c3c; color: white; border: 2px solid white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10; }
     .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
     label { font-size: 0.7rem; color: #95a5a6; display: block; margin-bottom: 2px; }
     input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
@@ -24,7 +25,8 @@
     .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; z-index: 1000; }
     .prediction-box { background: #f0f0f0; color: var(--subject-color); padding: 10px; border-radius: 8px; margin: 10px 0; font-weight: bold; border: 2px solid var(--subject-color); }
     #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
-    .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; transition: transform 0.1s ease-out; }
+    .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; transition: transform 0.1s linear; }
+    .bearing-indicator { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
   </style>
 </head>
 <body>
@@ -41,7 +43,7 @@
   <h3>方位讀取 (真北補正)</h3>
   <div class="compass-disc" id="compassDisc">
     <div style="position:absolute; top:0; left:50%; width:2px; height:100%; background:white; transform:translateX(-50%);"></div>
-    <div style="position:absolute; top:5px; left:50%; transform:translateX(-50%); font-weight:bold;">N</div>
+    <div style="position:absolute; top:5px; left:50%; transform:translateX(-50%); font-weight:bold; font-size:1.5rem;">N</div>
   </div>
   <h2 id="liveAngle" style="font-size: 3rem; margin: 10px 0;">0°</h2>
   <label style="color:white; font-size:0.8rem;">磁偏角校正：</label>
@@ -52,21 +54,23 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  let subjects = JSON.parse(localStorage.getItem('tracking_v12')) || [];
+  let subjects = JSON.parse(localStorage.getItem('tracking_v14')) || [];
   let currentTarget = { sIdx: null, pIdx: null };
   let rawAngle = 0;
   let declination = -4.5;
 
+  // 方位角顏色隨角度變化
   const getBearingColor = (angle) => `hsl(${angle % 360}, 80%, 50%)`;
+  // 個體顏色
   const getSubjectColor = (index) => `hsl(${(index * 137.5) % 360}, 65%, 40%)`;
 
   const map = L.map('map').setView([23.5, 121], 7);
   L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
 
-  function save() { localStorage.setItem('tracking_v12', JSON.stringify(subjects)); updateMapDisplay(); }
+  function save() { localStorage.setItem('tracking_v14', JSON.stringify(subjects)); updateMapDisplay(); }
 
   function addNewSubject() {
-    subjects.push({ id: Date.now(), subjectId: '個體 ' + (subjects.length + 1), color: getSubjectColor(subjects.length), points: [createPoint(), createPoint()], prediction: null });
+    subjects.push({ id: Date.now(), subjectId: '個體 ' + (subjects.length + 1), color: getSubjectColor(subjects.length), points: [createPoint()], prediction: null });
     render();
   }
 
@@ -94,10 +98,13 @@
               <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
               <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
             </div>
-            <button style="width:100%; margin-bottom:8px; background:#f0f0f0; border:1px solid #ccc; padding:5px; font-size:0.7rem;" onclick="getGPS(${sIdx},${pIdx})">📍 填入當前 GPS</button>
+            <button style="width:100%; margin-bottom:8px; background:#f0f0f0; border:1px solid #ccc; padding:5px; font-size:0.7rem;" onclick="getGPS(${sIdx},${pIdx})">📍 填入 GPS</button>
             <div class="input-row">
               <div style="display:flex; gap:5px; grid-column:span 2; align-items:flex-end;">
-                <div style="flex:1;"><label>方位角(真北°)</label><input type="number" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)"></div>
+                <div style="flex:1;">
+                  <label><span class="bearing-indicator" style="background:${p.bearing !== '' ? getBearingColor(p.bearing) : '#ccc'}"></span>方位角(真北°)</label>
+                  <input type="number" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)">
+                </div>
                 <button class="btn-compass" onclick="openCompass(${sIdx},${pIdx})">🧭</button>
               </div>
             </div>
@@ -124,11 +131,14 @@
     subjects.forEach(s => {
       s.points.forEach(p => {
         if(p.lat && p.lon) {
-          L.circleMarker([p.lat, p.lon], {radius: 6, color: s.color, fillOpacity: 0.6}).addTo(map);
-          if(p.bearing) {
+          // 觀測點：個體顏色
+          L.circleMarker([p.lat, p.lon], {radius: 6, color: s.color, fillColor: s.color, fillOpacity: 0.8}).addTo(map);
+          // 方位角線：角度變色
+          if(p.bearing !== '') {
+            const bColor = getBearingColor(p.bearing);
             const rad = (90 - p.bearing) * Math.PI / 180;
             const end = [parseFloat(p.lat) + Math.sin(rad)*0.04, parseFloat(p.lon) + Math.cos(rad)*0.04];
-            L.polyline([[p.lat, p.lon], end], {color: s.color, weight: 2, dashArray: '5, 8'}).addTo(map);
+            L.polyline([[p.lat, p.lon], end], {color: bColor, weight: 3, dashArray: '5, 8', opacity: 0.9}).addTo(map);
           }
         }
       });
@@ -136,13 +146,14 @@
     });
   }
 
-  function delLine(sIdx, pIdx) { if(confirm("刪除此線？")) { subjects[sIdx].points.splice(pIdx, 1); render(); } }
-  function delSub(sIdx) { if(confirm("刪除個體？")) { subjects.splice(sIdx, 1); render(); } }
+  function delLine(sIdx, pIdx) { if(confirm("確定刪除這條線？")) { subjects[sIdx].points.splice(pIdx, 1); render(); } }
+  function delSub(sIdx) { if(confirm("確定刪除整個個體紀錄？")) { subjects.splice(sIdx, 1); render(); } }
   function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
 
   async function openCompass(sIdx, pIdx) {
     currentTarget = { sIdx, pIdx };
     const p = subjects[sIdx].points[pIdx];
+    // 自動根據緯度調整磁偏角建議值
     declination = p.lat ? (p.lat > 23.5 ? -4.8 : -5.1) : -4.5;
     document.getElementById('manualDeclination').value = declination;
     if (typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission();
@@ -168,14 +179,14 @@
 
   function closeCompass() { document.getElementById('compassModal').style.display = 'none'; window.removeEventListener('deviceorientationabsolute', handleOrientation); }
 
-  function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => { subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6); subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6); render(); }); }
+  function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => { subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6); subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6); render(); }, err => alert("GPS 定位失敗"), {enableHighAccuracy: true}); }
 
   function calculate(sIdx) {
-    const lines = subjects[sIdx].points.filter(p => p.lat && p.lon && p.bearing).map(p => {
+    const lines = subjects[sIdx].points.filter(p => p.lat && p.lon && p.bearing !== '').map(p => {
       const rad = (90 - p.bearing) * Math.PI / 180;
       return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.cos(rad), dy: Math.sin(rad) };
     });
-    if (lines.length < 2) return alert("需兩條方位線");
+    if (lines.length < 2) return alert("至少需兩條方位線");
     let inters = [];
     for (let i = 0; i < lines.length; i++) {
       for (let j = i + 1; j < lines.length; j++) {
@@ -197,7 +208,10 @@
     const s = subjects[idx];
     let t = `【野生動物三角定位觀測紀錄】\n個體：${s.subjectId}\n\n觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n`;
     s.points.forEach((p, i) => t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain || ""},${p.strength || ""}\n`);
-    if(s.prediction) t += `\n🎯 預測交點：${s.prediction.lat}, ${s.prediction.lon}\nGoogle地圖：https://www.google.com/maps?q=${s.prediction.lat},${s.prediction.lon}`;
+    if(s.prediction) {
+      t += `\n🎯 預測交點：${s.prediction.lat}, ${s.prediction.lon}\n`;
+      t += `Google地圖：https://www.google.com/search?q=https://www.google.com/maps%3Fq%3D22.7568,121.1489{s.prediction.lat},${s.prediction.lon}`;
+    }
     
     if (navigator.share) {
       navigator.share({ text: t }).catch(() => copyAndNotify(t));
@@ -207,10 +221,10 @@
   }
 
   function copyAndNotify(text) {
-    navigator.clipboard.writeText(text).then(() => alert("報告已複製到剪貼簿！"));
+    navigator.clipboard.writeText(text).then(() => alert("報告內容已複製至剪貼簿！"));
   }
 
-  function resetAll() { if(confirm("重設所有資料？")) { localStorage.clear(); location.reload(); } }
+  function resetAll() { if(confirm("確定重設所有資料？")) { localStorage.clear(); location.reload(); } }
   window.onload = render;
 </script>
 </body>
