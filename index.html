@@ -13,15 +13,15 @@
     .subject-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 8px solid var(--subject-color); position: relative; }
     .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 70%; color: var(--subject-color); outline: none; background: transparent; border-bottom: 1px dashed #ccc; }
     .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 15px; position: relative; }
-    .btn-remove-line { position: absolute; top: -10px; right: -10px; background: var(--danger); color: white; border: 2px solid white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 10; }
+    .btn-remove-line { position: absolute; top: -10px; right: -10px; background: var(--danger); color: white; border: 2px solid white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; z-index: 10; }
     .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
     label { font-size: 0.7rem; color: #95a5a6; display: block; margin-bottom: 2px; }
     input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
     button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
     .btn-compass { background: #34495e; color: white; width: 45px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 5px; }
     .btn-calc { background: var(--subject-color); color: white; flex: 1; }
-    .btn-share { background: #2980b9; color: white; flex: 1; }
-    .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; z-index: 1000; }
+    .btn-share { background: #2980b9; color: white; flex: 1; min-width: 100px; }
+    .action-bar { position: fixed; bottom: 0; left: 0; right: 0; width: 100%; background: white; padding: 12px; display: flex !important; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.2); box-sizing: border-box; z-index: 9999; }
     .prediction-box { background: #f0f0f0; color: var(--subject-color); padding: 10px; border-radius: 8px; margin: 10px 0; font-weight: bold; border: 2px solid var(--subject-color); }
     #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
     .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; transition: transform 0.1s linear; }
@@ -119,10 +119,10 @@
           </div>
         `).join('')}
         <button style="margin:10px 0; width:100%; border:2px dashed #ddd; background:none; padding:12px; border-radius:8px;" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增方位線</button>
-        ${s.prediction ? `<div class="prediction-box">🎯 預測交點：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
-        <div style="display:flex; gap:10px;">
+        ${s.prediction ? `<div class="prediction-box">🎯 預估位置：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
+        <div style="display:flex; gap:10px; margin-top:10px;">
           <button class="btn-calc" onclick="calculate(${sIdx})">📐 計算交點</button>
-          <button class="btn-share" style="background:#2980b9; color:white; flex:1; display:block !important;" onclick="doShare(${sIdx})">📤 分享報告</button>
+          <button class="btn-share" onclick="doShare(${sIdx})">📤 分享報告</button>
         </div>
       `;
       container.appendChild(card);
@@ -137,16 +137,8 @@
         if(p.lat && p.lon) {
           L.circleMarker([p.lat, p.lon], {radius: 6, color: s.color, fillColor: s.color, fillOpacity: 0.8}).addTo(map);
           if(p.bearing !== '') {
-            // 修正：地理方位角轉弧度 (90 - bearing 是為了將北 0 度順時針轉為數學標準)
             const rad = (90 - p.bearing) * Math.PI / 180;
-            
-            // 修正：dx 應該對應 Cosine (經度方向), dy 應該對應 Sine (緯度方向)
-            return { 
-                x: parseFloat(p.lon), 
-                y: parseFloat(p.lat), 
-                dx: Math.cos(rad), 
-                dy: Math.sin(rad) 
-            };
+            const end = [parseFloat(p.lat) + Math.sin(rad)*0.04, parseFloat(p.lon) + Math.cos(rad)*0.04];
             L.polyline([[p.lat, p.lon], end], {color: getBearingColor(p.bearing), weight: 3, dashArray: '5, 8', opacity: 0.9}).addTo(map);
           }
         }
@@ -189,58 +181,35 @@
 
   function calculate(sIdx) {
     const s = subjects[sIdx];
-    // 1. 篩選有資料的點，並將地理方位角轉為數學弧度
     const lines = s.points.filter(p => p.lat && p.lon && p.bearing !== '').map(p => {
-      // 地理角度轉數學角度：(90 - angle) 
       const angleRad = (90 - parseFloat(p.bearing)) * (Math.PI / 180);
-      return {
-        x: parseFloat(p.lon),
-        y: parseFloat(p.lat),
-        dx: Math.cos(angleRad),
-        dy: Math.sin(angleRad)
-      };
+      return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.cos(angleRad), dy: Math.sin(angleRad) };
     });
-  
     if (lines.length < 2) return alert("至少需兩條方位線");
-  
     let inters = [];
-    // 2. 兩兩計算交點
     for (let i = 0; i < lines.length; i++) {
       for (let j = i + 1; j < lines.length; j++) {
         const a = lines[i], b = lines[j];
-        // 行列式計算
         const div = a.dx * b.dy - a.dy * b.dx;
-        if (Math.abs(div) < 1e-10) continue; // 平行線跳過
-  
+        if (Math.abs(div) < 1e-10) continue;
         const t = ((b.x - a.x) * b.dy - (b.y - a.y) * b.dx) / div;
-        
-        const px = a.x + t * a.dx;
-        const py = a.y + t * a.dy;
-        inters.push([py, px]); // [lat, lon]
+        inters.push([a.y + t * a.dy, a.x + t * a.dx]);
       }
     }
-  
-    // 3. 執行您的平均公式：(1/n) * Σ
     if (inters.length > 0) {
       const lat_avg = inters.reduce((sum, p) => sum + p[0], 0) / inters.length;
       const lon_avg = inters.reduce((sum, p) => sum + p[1], 0) / inters.length;
-  
-      s.prediction = { 
-        lat: lat_avg.toFixed(6), 
-        lon: lon_avg.toFixed(6) 
-      };
+      s.prediction = { lat: lat_avg.toFixed(6), lon: lon_avg.toFixed(6) };
       render();
       map.setView([lat_avg, lon_avg], 15);
     } else {
-      alert("無法找到交點，請檢查方位角是否平行");
+      alert("無法找到交點");
     }
   }
 
   function doShare(idx) {
     const s = subjects[idx];
-    let t = `【野生動物三角定位觀測紀錄】\n`;
-    t += `個體名稱：${s.subjectId}\n`;
-    t += `觀測資料（日期,時間,緯度,經度,方位角,gain,強度,備註）：\n`;
+    let t = `【野生動物三角定位觀測紀錄】\n個體名稱：${s.subjectId}\n觀測資料（日期,時間,緯度,經度,方位角,gain,強度,備註）：\n`;
     s.points.forEach((p, i) => {
       t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain || ""},${p.strength || ""},${p.note || ""}\n`;
     });
