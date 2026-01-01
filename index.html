@@ -19,6 +19,8 @@
     
     .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 70%; color: var(--subject-color); outline: none; background: transparent; border-bottom: 1px dashed #ccc; }
     .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 10px; position: relative; }
+    .btn-del-line { position: absolute; top: 8px; right: 8px; background: #fee; color: #e74c3c; border: 1px solid #fcc; border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; cursor: pointer; }
+    
     .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
     label { font-size: 0.7rem; color: #95a5a6; display: block; margin-bottom: 2px; }
     input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
@@ -31,10 +33,9 @@
     .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; z-index: 1000; }
     .prediction-box { background: #f0f0f0; color: var(--subject-color); padding: 10px; border-radius: 8px; margin: 10px 0; font-weight: bold; border: 2px solid var(--subject-color); }
     
-    .bearing-indicator { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
-
     #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
     .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; }
+    .bearing-indicator { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
   </style>
 </head>
 <body>
@@ -51,7 +52,6 @@
   <h3>方位讀取 (真北補正)</h3>
   <div class="compass-disc" id="compassDisc"><div style="position:absolute; top:0; left:50%; width:2px; height:100%; background:white; transform:translateX(-50%);"></div></div>
   <h2 id="liveAngle" style="font-size: 3rem; margin: 10px 0;">0°</h2>
-  <div style="font-size: 0.8rem; margin-bottom: 5px;">磁偏角校正：</div>
   <input type="number" id="manualDeclination" value="-4.5" step="0.1" style="width:80px; text-align:center;" onchange="updateDeclination(this.value)">
   <button onclick="lockCompass()" style="background:var(--accent); color:white; padding:15px 50px; border-radius:30px; margin-top:20px;">鎖定角度</button>
   <button onclick="closeCompass()" style="background:none; color:white; margin-top:10px;">取消</button>
@@ -59,7 +59,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  let subjects = JSON.parse(localStorage.getItem('tracking_v11')) || [];
+  let subjects = JSON.parse(localStorage.getItem('tracking_v12')) || [];
   let currentTarget = { sIdx: null, pIdx: null };
   let rawAngle = 0;
   let declination = -4.5;
@@ -70,13 +70,11 @@
   const map = L.map('map').setView([23.5, 121], 7);
   L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
 
-  function save() { localStorage.setItem('tracking_v11', JSON.stringify(subjects)); updateMapDisplay(); }
+  function save() { localStorage.setItem('tracking_v12', JSON.stringify(subjects)); updateMapDisplay(); }
 
-  // 自動抓取磁偏角邏輯 (根據座標)
+  // 自動抓取磁偏角邏輯
   function getAutoDeclination(lat, lon) {
     if(!lat || !lon) return -4.5;
-    // 台灣東部 WMM2025/26 簡易線性插值
-    // 台東約 -5.0, 花蓮約 -4.8
     if(lat > 24) return -4.7;
     if(lat < 23) return -5.1;
     return -4.9;
@@ -95,11 +93,7 @@
 
   function createPoint() {
     const now = new Date();
-    return { 
-      date: now.toISOString().split('T')[0], 
-      time: now.toTimeString().split(' ')[0].substring(0, 5), 
-      lat: '', lon: '', bearing: '', gain: '', strength: '', note: '' 
-    };
+    return { date: now.toISOString().split('T')[0], time: now.toTimeString().split(' ')[0].substring(0, 5), lat: '', lon: '', bearing: '', gain: '', strength: '', note: '' };
   }
 
   function render() {
@@ -112,10 +106,11 @@
       card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <input class="subject-id-input" style="color:${s.color}" value="${s.subjectId}" onchange="subjects[${sIdx}].subjectId=this.value;save();">
-            <button onclick="delSub(${sIdx})" style="background:none; color:#e74c3c; font-size:0.75rem;">刪除個體</button>
+            <button onclick="delSub(${sIdx})" style="background:none; color:#e74c3c; font-size:0.75rem;">刪除病例</button>
         </div>
         ${s.points.map((p, pIdx) => `
           <div class="obs-item">
+            <button class="btn-del-line" onclick="delLine(${sIdx}, ${pIdx})">✕ 刪除線</button>
             <div class="input-row">
               <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
               <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
@@ -137,7 +132,7 @@
             <label style="margin-top:5px;">備註</label><input type="text" value="${p.note}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
           </div>
         `).join('')}
-        <button class="btn-add-pt" style="margin:10px 0; width:100%; border:1px dashed #ccc; background:none; border-radius:8px; padding:10px;" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增定位線</button>
+        <button class="btn-add-pt" style="margin:10px 0; width:100%; border:1px dashed #ccc; background:none; padding:10px; border-radius:8px;" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增定位線</button>
         ${s.prediction ? `<div class="prediction-box">🎯 預測位置：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
         <div style="display:flex; gap:10px;">
           <button class="btn-calc" onclick="calculate(${sIdx})">📐 計算定位</button>
@@ -170,10 +165,17 @@
     });
   }
 
+  // --- 刪除特定定位線函式 ---
+  function delLine(sIdx, pIdx) {
+    if(confirm("確定刪除此條定位方位線？")) {
+      subjects[sIdx].points.splice(pIdx, 1);
+      render();
+    }
+  }
+
   async function openCompass(sIdx, pIdx) {
     currentTarget = { sIdx, pIdx };
     const p = subjects[sIdx].points[pIdx];
-    // 自動抓取磁偏角
     declination = getAutoDeclination(p.lat, p.lon);
     document.getElementById('manualDeclination').value = declination;
 
@@ -205,16 +207,12 @@
     document.getElementById('compassModal').style.display = 'none';
     window.removeEventListener('deviceorientationabsolute', handleOrientation);
   }
-
   function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
   function delSub(sIdx) { if(confirm("刪除此記錄？")) { subjects.splice(sIdx,1); render(); } }
-  
   function getGPS(sIdx, pIdx) { 
     navigator.geolocation.getCurrentPosition(pos => {
       subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6);
       subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6);
-      // 自動更新磁偏角預設值
-      declination = getAutoDeclination(pos.coords.latitude, pos.coords.longitude);
       render();
     }, err => alert("無法取得位置"), {enableHighAccuracy: true}); 
   }
@@ -251,22 +249,15 @@
     let t = `【野生動物三角定位觀測紀錄】\n`;
     t += `個體編號：${s.subjectId}\n\n`;
     t += `觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n`;
-    
     s.points.forEach((p, i) => {
       t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain},${p.strength}\n`;
     });
-
     if(s.prediction) {
       t += `\n預測位置：\n緯度: ${s.prediction.lat}, 經度: ${s.prediction.lon}\n`;
-      t += `Google地圖：https://www.google.com/maps?q=${s.prediction.lat},${s.prediction.lon}`;
+      t += `Google地圖：https://www.google.com/search?q=https://www.google.com/maps%3Fq%3D22.7562,121.1481{s.prediction.lat},${s.prediction.lon}`;
     }
-
-    if (navigator.share) {
-      navigator.share({ title: '追蹤報告', text: t }).catch(err => copyToClipboard(t));
-    } else {
-      copyToClipboard(t);
-      alert("已複製報告內容至剪貼簿！");
-    }
+    if (navigator.share) navigator.share({ title: '追蹤報告', text: t }).catch(err => copyToClipboard(t));
+    else { copyToClipboard(t); alert("已複製至剪貼簿！"); }
   }
 
   function copyToClipboard(text) {
