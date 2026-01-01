@@ -17,13 +17,6 @@
     .input-table .op-btn { width: 3em; }
     .example-block { color: #666; font-size: 0.95em; margin-bottom: 0.5em; }
     .example-block span { font-family: monospace; white-space: pre; }
-    .input-table {
-      display: block;
-      width: 100%;
-      overflow-x: auto;
-      white-space: nowrap;
-      min-width: 600px;
-    }
     .input-table input {
       min-width: 4em;
       max-width: 100%;
@@ -48,6 +41,53 @@
         padding: 0.3em 0.7em;
       }
     }
+    /* ===== 手機：表格改卡片式（不左右滑） ===== */
+    @media (max-width: 720px) {
+      .input-table {
+        display: table;           /* 回到正常 table 行為 */
+        white-space: normal;
+        overflow-x: visible;
+        min-width: 0;
+      }
+
+      .input-table thead { display: none; }
+
+      #inputTableBody tr {
+        display: block;
+        margin: 0.6rem 0;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 0.6rem;
+        background: #fff;
+      }
+
+      #inputTableBody td {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        border: 0;
+        padding: 0.35rem 0;
+        text-align: left;
+      }
+
+      /* 左邊顯示欄名（用 data-label） */
+      #inputTableBody td::before {
+        content: attr(data-label);
+        flex: 0 0 6.5em;
+        font-weight: 700;
+        color: #444;
+      }
+
+      #inputTableBody td input {
+        width: 100%;
+        min-width: 0;
+      }
+
+      /* 操作按鈕那格 */
+      #inputTableBody td.op-btn {
+        justify-content: flex-end;
+      }
+    }
   </style>
 </head>
 <body>
@@ -62,7 +102,7 @@
     <input id="caseIdInput" type="text" placeholder="例如：WO-2026-0001"
            style="padding:0.3rem 0.5rem; width: 16em; max-width: 100%;"
            oninput="saveCaseIdToStorage()">
-    </div>  
+    </div>
     <div class="example-block">
       範例：<br>
       <span>日期,時間,緯度,經度,方位角,gain,強度</span><br>
@@ -101,7 +141,7 @@
       caseId = v;
       localStorage.setItem('wildlife_case_id', caseId);
     }
-    
+
     // 載入病例編號
     function loadCaseIdFromStorage() {
       caseId = localStorage.getItem('wildlife_case_id') || '';
@@ -125,20 +165,18 @@
       }
       renderInputTable();
     }
-    
+
 
     // 清除所有資料
     function clearAllData() {
       if (confirm('確定要清除所有資料嗎？此動作無法還原。')) {
         recordedPoints = [];
         localStorage.removeItem('wildlife_points');
-    
-        // ✅ 清掉病例編號（畫面 + 記憶）
-        caseId = '';
-        localStorage.removeItem('wildlife_case_id');
-        const caseEl = document.getElementById('caseIdInput');
+
+        // ✅ 清掉病例編號（畫面 input）
+        const caseEl = document.getElementById('caseNo');
         if (caseEl) caseEl.value = '';
-    
+
         renderInputTable();
         document.getElementById('pointTable').innerHTML = '';
         map.eachLayer(layer => {
@@ -150,15 +188,26 @@
     }
 
 
-
     // 渲染表格
     function renderInputTable() {
       const tbody = document.getElementById('inputTableBody');
       tbody.innerHTML = '';
       recordedPoints.forEach((p, idx) => {
         const row = document.createElement('tr');
-        ['date','time','lat','lon','bearing','gain','strength'].forEach(key => {
+        const fields = [
+          ['date', '日期'],
+          ['time', '時間'],
+          ['lat', '緯度'],
+          ['lon', '經度'],
+          ['bearing', '方位角'],
+          ['gain', 'gain'],
+          ['strength', '強度']
+        ];
+
+        fields.forEach(([key, label]) => {
           const td = document.createElement('td');
+          td.dataset.label = label; // ✅ 這行就是讓手機顯示「日期：」「時間：」那個左側標籤
+
           const input = document.createElement('input');
           input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
           if (key === 'lat' || key === 'lon') input.step = 'any';
@@ -167,12 +216,15 @@
             recordedPoints[idx][key] = input.value;
             savePointsToStorage();
           };
+
           td.appendChild(input);
           row.appendChild(td);
         });
+
         // 刪除按鈕
         const tdDel = document.createElement('td');
         tdDel.className = 'op-btn';
+        tdDel.dataset.label = '操作';
         const btnDel = document.createElement('button');
         btnDel.textContent = '刪除';
         btnDel.onclick = () => {
@@ -189,7 +241,7 @@
     function bearingToRadians(b) {
       return b * Math.PI / 180;
     }
-    
+
     function lineFromPointBearing(lat, lon, bearing) {
       const angle = bearingToRadians(bearing);
       const dx = Math.sin(angle);
@@ -314,31 +366,34 @@
         alert('沒有觀測資料可分享');
         return;
       }
-    
       let text = '';
       text += '【野生動物三角定位觀測紀錄】\n';
-    
-      if (caseId) {
-        text += `病例編號：${caseId}\n`;
-      }
-    
       text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n';
       recordedPoints.forEach((p, i) => {
-        text += `${i+1}. ${p.date||''},${p.time||''},${p.lat||''},${p.lon||''},${p.bearing||''},${p.gain||''},${p.strength||''}\n`;
+        text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''}\n`;
       });
-    
       if (currentPrediction) {
-        text += `\n預測位置：\n`;
-        text += `緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
-        text += `Google 地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
-      } else {
-        text += `\n（尚未計算預測位置）\n`;
+        text += `\n預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
+        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
       }
-    
-      // ✅ 區網 http 不能用系統分享 → 一定跳出可複製視窗
-      prompt('請複製以下內容分享：', text);
-    }
 
+      // ✅ 產生「帶病例編號」的分享連結（不是必要，但你說你在談分享動作）
+      const shareUrl = caseNo
+        ? `${location.origin}${location.pathname}?caseNo=${encodeURIComponent(caseNo)}`
+        : location.href;
+
+      text += `\n網址：${location.href}`;
+
+      if (navigator.share) {
+        navigator.share({
+          title: '野生動物預測位置',
+          text,
+          url: location.href
+        }).catch(err => console.error('分享失敗', err));
+      } else {
+        prompt('請手動複製以下資訊分享：', text);
+      }
+    }
 
     // 用藍色小圓點顯示目前位置
     function showCurrentLocationOnMap(lat=null, lon=null) {
