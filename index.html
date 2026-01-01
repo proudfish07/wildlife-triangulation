@@ -122,7 +122,7 @@
         ${s.prediction ? `<div class="prediction-box">🎯 預測交點：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
         <div style="display:flex; gap:10px;">
           <button class="btn-calc" onclick="calculate(${sIdx})">📐 計算交點</button>
-          <button class="btn-share" onclick="doShare(${sIdx})">📤 分享報告</button>
+          <button class="btn-share" style="background:#2980b9; color:white; flex:1; display:block !important;" onclick="doShare(${sIdx})">📤 分享報告</button>
         </div>
       `;
       container.appendChild(card);
@@ -188,38 +188,59 @@
   function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => { subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6); subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6); render(); }, null, {enableHighAccuracy: true}); }
 
   function calculate(sIdx) {
-    const lines = subjects[sIdx].points.filter(p => p.lat && p.lon && p.bearing !== '').map(p => {
-      const rad = (90 - p.bearing) * Math.PI / 180;
-      return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.cos(rad), dy: Math.sin(rad) };
+    const s = subjects[sIdx];
+    // 1. 篩選有資料的點，並將地理方位角轉為數學弧度
+    const lines = s.points.filter(p => p.lat && p.lon && p.bearing !== '').map(p => {
+      // 地理角度轉數學角度：(90 - angle) 
+      const angleRad = (90 - parseFloat(p.bearing)) * (Math.PI / 180);
+      return {
+        x: parseFloat(p.lon),
+        y: parseFloat(p.lat),
+        dx: Math.cos(angleRad),
+        dy: Math.sin(angleRad)
+      };
     });
+  
     if (lines.length < 2) return alert("至少需兩條方位線");
+  
     let inters = [];
+    // 2. 兩兩計算交點
     for (let i = 0; i < lines.length; i++) {
       for (let j = i + 1; j < lines.length; j++) {
-        const l1 = lines[i], l2 = lines[j];
-        const det = l1.dx * (-l2.dy) - (-l1.dy) * l2.dx;
-        if (Math.abs(det) > 1e-10) {
-          const t = ((l2.x - l1.x) * (-l2.dy) - (l2.y - l1.y) * l2.dx) / det;
-          inters.push([l1.y + l1.dy * t, l1.x + l1.dx * t]);
-        }
+        const a = lines[i], b = lines[j];
+        // 行列式計算
+        const div = a.dx * b.dy - a.dy * b.dx;
+        if (Math.abs(div) < 1e-10) continue; // 平行線跳過
+  
+        const t = ((b.x - a.x) * b.dy - (b.y - a.y) * b.dx) / div;
+        
+        const px = a.x + t * a.dx;
+        const py = a.y + t * a.dy;
+        inters.push([py, px]); // [lat, lon]
       }
-    } // <--- 修正：原本這行括號在最後，現在要移到這裡結束迴圈
-
-    if (inters.length > 0) {
-        const lat_avg = inters.reduce((sum, p) => sum + p[0], 0) / inters.length;
-        const lon_avg = inters.reduce((sum, p) => sum + p[1], 0) / inters.length;
-        subjects[sIdx].prediction = { 
-            lat: lat_avg.toFixed(6), 
-            lon: lon_avg.toFixed(6) 
-          };
-        render(); 
-        map.setView([lat_avg, lon_avg], 15);
     }
-  } // <--- 這是函式的結束括號
+  
+    // 3. 執行您的平均公式：(1/n) * Σ
+    if (inters.length > 0) {
+      const lat_avg = inters.reduce((sum, p) => sum + p[0], 0) / inters.length;
+      const lon_avg = inters.reduce((sum, p) => sum + p[1], 0) / inters.length;
+  
+      s.prediction = { 
+        lat: lat_avg.toFixed(6), 
+        lon: lon_avg.toFixed(6) 
+      };
+      render();
+      map.setView([lat_avg, lon_avg], 15);
+    } else {
+      alert("無法找到交點，請檢查方位角是否平行");
+    }
+  }
 
   function doShare(idx) {
     const s = subjects[idx];
-    let t = `【野生動物三角定位觀測紀錄】\n觀測資料（日期,時間,緯度,經度,方位角,gain,強度,備註）：\n`;
+    let t = `【野生動物三角定位觀測紀錄】\n`;
+    t += `個體名稱：${s.subjectId}\n`;
+    t += `觀測資料（日期,時間,緯度,經度,方位角,gain,強度,備註）：\n`;
     s.points.forEach((p, i) => {
       t += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing},${p.gain || ""},${p.strength || ""},${p.note || ""}\n`;
     });
