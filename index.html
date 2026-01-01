@@ -11,24 +11,24 @@
     #map { height: 30vh; width: 100%; shrink: 0; z-index: 1; border-bottom: 2px solid #ccc; }
     .content { flex: 1; overflow-y: auto; padding: 12px; padding-bottom: 100px; }
     .subject-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 8px solid var(--primary); }
-    .subject-title-area { border-bottom: 2px solid #eee; margin-bottom: 15px; padding-bottom: 5px; }
     .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 100%; color: var(--primary); outline: none; background: transparent; }
     .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 10px; position: relative; }
     .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-    .bearing-group { display: flex; gap: 5px; align-items: flex-end; }
     label { font-size: 0.7rem; color: #95a5a6; display: block; margin-bottom: 2px; }
     input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
     button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
-    .btn-gps { width: 100%; margin-bottom: 10px; font-size: 0.75rem; background: #eee; }
-    .btn-compass { background: #34495e; color: white; padding: 8px; width: 45px; height: 38px; display: flex; align-items: center; justify-content: center; }
+    .btn-compass { background: #34495e; color: white; width: 45px; height: 38px; }
     .btn-calc { background: var(--accent); color: white; flex: 1; }
     .btn-share { background: #2980b9; color: white; flex: 1; }
     .action-bar { position: fixed; bottom: 0; width: 100%; background: white; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.1); box-sizing: border-box; z-index: 1000; }
     .prediction-box { background: #e8f8f0; color: #27ae60; padding: 10px; border-radius: 8px; margin-top: 10px; font-weight: bold; border: 1px solid #27ae60; }
-    /* 羅盤彈窗 */
-    #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
-    .compass-disc { width: 200px; height: 200px; border: 4px solid white; border-radius: 50%; position: relative; transition: transform 0.1s; margin: 20px; }
-    .compass-arrow { position: absolute; top: 0; left: 50%; width: 4px; height: 50%; background: red; transform: translateX(-200%); }
+    
+    /* 羅盤視窗優化 */
+    #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
+    .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; transition: transform 0.1s ease-out; }
+    .compass-needle { position: absolute; top: 0; left: 50%; width: 2px; height: 100%; background: white; transform: translateX(-50%); }
+    .compass-needle::before { content: 'N'; position: absolute; top: -25px; left: -5px; color: red; font-weight: bold; }
+    .correction-hint { font-size: 0.8rem; color: #aaa; margin-bottom: 15px; text-align: center; }
   </style>
 </head>
 <body>
@@ -42,25 +42,36 @@
 </div>
 
 <div id="compassModal">
-  <h3>請將手機水平對準天線指向</h3>
-  <div class="compass-disc" id="compassDisc">
-    <div class="compass-arrow"></div>
+  <h3 style="margin-bottom:5px;">方位角讀取 (真北補正)</h3>
+  <div class="correction-hint">
+    目前磁偏角補正: <span id="declinationVal">-4.5</span>°<br>
+    (已將原始數值 22° 修正為 17.5°)
   </div>
-  <h2 id="liveAngle">0°</h2>
-  <button onclick="lockCompass()" style="background:var(--accent); color:white; padding:15px 40px;">鎖定並填入角度</button>
-  <button onclick="closeCompass()" style="background:none; color:white; margin-top:20px;">取消</button>
+  <div class="compass-disc" id="compassDisc">
+    <div class="compass-needle"></div>
+  </div>
+  <h2 id="liveAngle" style="font-size: 3rem; margin: 10px 0;">0°</h2>
+  
+  <div style="margin-bottom: 20px; width: 80%;">
+    <label style="color:white; text-align:center;">微調磁偏角 (台灣建議 -4 至 -5)</label>
+    <input type="number" id="manualDeclination" value="-4.5" step="0.1" style="text-align:center;" onchange="updateDeclination(this.value)">
+  </div>
+
+  <button onclick="lockCompass()" style="background:var(--accent); color:white; padding:15px 50px; font-size:1.1rem; border-radius:30px;">鎖定角度</button>
+  <button onclick="closeCompass()" style="background:none; color:white; margin-top:20px; text-decoration:underline;">取消離開</button>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  let subjects = JSON.parse(localStorage.getItem('tracking_v6')) || [];
+  let subjects = JSON.parse(localStorage.getItem('tracking_v7')) || [];
   let currentTarget = { sIdx: null, pIdx: null };
-  let currentAngle = 0;
+  let rawAngle = 0;
+  let declination = -4.5; // 預設台灣磁偏角補正
 
   const map = L.map('map').setView([23.5, 121], 7);
   L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
 
-  function save() { localStorage.setItem('tracking_v6', JSON.stringify(subjects)); updateMapDisplay(); }
+  function save() { localStorage.setItem('tracking_v7', JSON.stringify(subjects)); updateMapDisplay(); }
 
   function addNewSubject() {
     subjects.push({ id: Date.now(), subjectId: '新病例 ' + (subjects.length + 1), points: [createPoint(), createPoint()], prediction: null });
@@ -84,15 +95,18 @@
         </div>
         ${s.points.map((p, pIdx) => `
           <div class="obs-item">
-            <div class="obs-header">線條 #${pIdx + 1} <button onclick="subjects[${sIdx}].points.splice(${pIdx},1);render();" style="color:red; background:none; font-size:12px;">刪除</button></div>
+            <div class="obs-header" style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:bold;">
+                線條 #${pIdx + 1} 
+                <button onclick="subjects[${sIdx}].points.splice(${pIdx},1);render();" style="color:red; background:none; padding:0;">刪除</button>
+            </div>
             <div class="input-row">
               <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
               <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
             </div>
-            <button class="btn-gps" onclick="getGPS(${sIdx},${pIdx})">📍 獲取當前 GPS</button>
+            <button style="width:100%; margin-bottom:10px; background:#eee; padding:5px; font-size:0.75rem;" onclick="getGPS(${sIdx},${pIdx})">📍 獲取 GPS 座標</button>
             <div class="input-row">
-              <div class="bearing-group" style="grid-column: span 2;">
-                <div style="flex:1;"><label>方位角(°)</label><input type="number" id="bearing-${sIdx}-${pIdx}" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)"></div>
+              <div style="display:flex; gap:5px; grid-column:span 2; align-items:flex-end;">
+                <div style="flex:1;"><label>方位角(真北°)</label><input type="number" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)"></div>
                 <button class="btn-compass" onclick="openCompass(${sIdx},${pIdx})">🧭</button>
               </div>
             </div>
@@ -100,7 +114,7 @@
                <div><label>Gain</label><input type="text" value="${p.gain}" onchange="upd(${sIdx},${pIdx},'gain',this.value)"></div>
                <div><label>強度</label><input type="text" value="${p.strength}" onchange="upd(${sIdx},${pIdx},'strength',this.value)"></div>
             </div>
-            <label style="margin-top:8px;">備註</label><input type="text" value="${p.note}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
+            <label style="margin-top:5px;">備註</label><input type="text" value="${p.note}" onchange="upd(${sIdx},${pIdx},'note',this.value)">
           </div>
         `).join('')}
         <button class="btn-add-pt" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增定位線</button>
@@ -120,26 +134,32 @@
     currentTarget = { sIdx, pIdx };
     if (typeof DeviceOrientationEvent.requestPermission === 'function') {
       const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission !== 'granted') return alert("需要權限才能使用羅盤");
+      if (permission !== 'granted') return alert("需授權羅盤權限");
     }
     document.getElementById('compassModal').style.display = 'flex';
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-    // 針對 iOS
     window.addEventListener('deviceorientation', handleOrientation, true);
   }
 
   function handleOrientation(event) {
-    // 優先使用 webkitCompassHeading (iOS) 或 alpha (Android)
     let heading = event.webkitCompassHeading || (360 - event.alpha);
     if (heading) {
-      currentAngle = Math.round(heading);
-      document.getElementById('liveAngle').innerText = currentAngle + "°";
-      document.getElementById('compassDisc').style.transform = `rotate(${-currentAngle}deg)`;
+      rawAngle = heading;
+      // 關鍵：將原始角度加上補正值 (例如 22 + (-4.5) = 17.5)
+      let correctedAngle = (rawAngle + declination + 360) % 360;
+      document.getElementById('liveAngle').innerText = Math.round(correctedAngle) + "°";
+      document.getElementById('compassDisc').style.transform = `rotate(${-correctedAngle}deg)`;
     }
   }
 
+  function updateDeclination(val) {
+    declination = parseFloat(val);
+    document.getElementById('declinationVal').innerText = val;
+  }
+
   function lockCompass() {
-    upd(currentTarget.sIdx, currentTarget.pIdx, 'bearing', currentAngle);
+    let corrected = (rawAngle + declination + 360) % 360;
+    upd(currentTarget.sIdx, currentTarget.pIdx, 'bearing', Math.round(corrected));
     closeCompass();
     render();
   }
@@ -150,7 +170,7 @@
     window.removeEventListener('deviceorientation', handleOrientation);
   }
 
-  // --- 基礎功能 ---
+  // --- 其他功能 ---
   function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
   function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => {
     subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6);
@@ -204,11 +224,11 @@
     const s = subjects[idx];
     let t = `【追蹤：${s.subjectId}】\n`;
     s.points.forEach((p, i) => t += `#${i+1}: ${p.lat},${p.lon} | ${p.bearing}° | G:${p.gain} S:${p.strength}\n`);
-    if(s.prediction) t += `🎯 預測: ${s.prediction.lat}, ${s.prediction.lon}\n連結: https://www.google.com/maps?q=$${s.prediction.lat},${s.prediction.lon}`;
-    navigator.share ? navigator.share({ text: t }) : alert("請手動複製");
+    if(s.prediction) t += `🎯 預測: ${s.prediction.lat}, ${s.prediction.lon}\n連結: http://maps.google.com/maps?q=${s.prediction.lat},${s.prediction.lon}`;
+    navigator.share ? navigator.share({ text: t }) : alert("請手動複製內容");
   }
 
-  function resetAll() { if(confirm("重設？")) { localStorage.clear(); location.reload(); } }
+  function resetAll() { if(confirm("確定重設所有資料？")) { localStorage.clear(); location.reload(); } }
   window.onload = render;
 </script>
 </body>
