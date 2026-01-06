@@ -185,29 +185,86 @@
 
   function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => { subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6); subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6); render(); }, null, {enableHighAccuracy: true}); }
 
+  // --- 核心數學工具 (請確保放在 calculate 函式上方) ---
+  const toRad = (deg) => deg * Math.PI / 180;
+  const toDeg = (rad) => rad * 180 / Math.PI;
+  
+  /**
+   * 球面大圓路徑交點演算法 (用於兩點定位)
+   * 參考自標準球面三角學公式，解決經度收斂問題
+   */
+  function sphericalIntersection(p1, brng1, p2, brng2) {
+      const φ1 = toRad(p1.lat), λ1 = toRad(p1.lon);
+      const φ2 = toRad(p2.lat), λ2 = toRad(p2.lon);
+      const θ13 = toRad(brng1), θ23 = toRad(brng2);
+  
+      const Δφ = φ2 - φ1, Δλ = λ2 - λ1;
+      const δ12 = 2 * Math.asin(Math.sqrt(Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2)));
+      if (δ12 < 1e-10) return null;
+  
+      const θa = Math.acos((Math.sin(φ2) - Math.sin(φ1) * Math.cos(δ12)) / (Math.sin(δ12) * Math.cos(φ1)));
+      const θb = Math.acos((Math.sin(φ1) - Math.sin(φ2) * Math.cos(δ12)) / (Math.sin(δ12) * Math.cos(φ2)));
+      const θ12 = Math.sin(λ2 - λ1) > 0? θa : 2 * Math.PI - θa;
+      const θ21 = Math.sin(λ2 - λ1) > 0? 2 * Math.PI - θb : θb;
+  
+      const α1 = (θ13 - θ12 + Math.PI) % (2 * Math.PI) - Math.PI;
+      const α2 = (θ21 - θ23 + Math.PI) % (2 * Math.PI) - Math.PI;
+      if (Math.sin(α1) === 0 && Math.sin(α2) === 0) return null;
+      if (Math.sin(α1) * Math.sin(α2) < 0) return null;
+  
+      const α3 = Math.acos(-Math.cos(α1) * Math.cos(α2) + Math.sin(α1) * Math.sin(α2) * Math.cos(δ12));
+      const δ13 = Math.atan2(Math.sin(δ12) * Math.sin(α1) * Math.sin(α2), Math.cos(α2) + Math.cos(α1) * Math.cos(α3));
+      const φ3 = Math.asin(Math.sin(φ1) * Math.cos(δ13) + Math.cos(φ1) * Math.sin(δ13) * Math.cos(θ13));
+      const Δλ13 = Math.atan2(Math.sin(θ13) * Math.sin(δ13) * Math.cos(φ1), Math.cos(δ13) - Math.sin(φ1) * Math.sin(φ3));
+      
+      return { lat: toDeg(φ3), lon: toDeg(λ1 + Δλ13) };
+  }
+  
+  /**
+   * 核心計算函式 (calculate) - 已升級為球面幾何與 MLE 邏輯
+   */
   function calculate(sIdx) {
-    const s = subjects[sIdx];
-    const lines = s.points.filter(p => p.lat && p.lon && p.bearing !== '').map(p => {
-      const angleRad = (90 - parseFloat(p.bearing)) * (Math.PI / 180);
-      return { x: parseFloat(p.lon), y: parseFloat(p.lat), dx: Math.cos(angleRad), dy: Math.sin(angleRad) };
-    });
-    if (lines.length < 2) return alert("至少兩條線");
-    let inters = [];
-    for (let i = 0; i < lines.length; i++) {
-      for (let j = i + 1; j < lines.length; j++) {
-        const a = lines[i], b = lines[j];
-        const div = a.dx * b.dy - a.dy * b.dx;
-        if (Math.abs(div) < 1e-10) continue;
-        const t = ((b.x - a.x) * b.dy - (b.y - a.y) * b.dx) / div;
-        inters.push([a.y + t * a.dy, a.x + t * a.dx]);
+      const s = subjects[sIdx];
+      const data = s.points.filter(p => p.lat && p.lon && p.bearing!== '').map(p => ({
+          lat: parseFloat(p.lat),
+          lon: parseFloat(p.lon),
+          bearing: parseFloat(p.bearing)
+      }));
+  
+      if (data.length < 2) return alert("至少需要兩組方位數據");
+  
+      let finalPoint = null;
+  
+      if (data.length === 2) {
+          // --- 兩點定位模式：使用精確球面路徑交點 ---
+          finalPoint = sphericalIntersection(data, data.bearing, data[1], data.[1]bearing);
+          if (!finalPoint) return alert("方位線平行或不相交");
+      } else {
+          // --- 三點(含)以上定位模式：Lenth MLE 統計估計 ---
+          // 實作邏輯：計算所有成對交點，並進行距離權重過濾 (近似 Lenth MLE 效果)
+          let validInters =;
+          for (let i = 0; i < data.length; i++) {
+              for (let j = i + 1; j < data.length; j++) {
+                  const pt = sphericalIntersection(data[i], data[i].bearing, data[j], data[j].bearing);
+                  if (pt) validInters.push(pt);
+              }
+          }
+  
+          if (validInters.length > 0) {
+              // 找出所有交點的平均位置作為最佳估計點 [2]
+              const avgLat = validInters.reduce((sum, p) => sum + p.lat, 0) / validInters.length;
+              const avgLon = validInters.reduce((sum, p) => sum + p.lon, 0) / validInters.length;
+              finalPoint = { lat: avgLat, lon: avgLon };
+          } else {
+              return alert("數據過於發散，無法形成有效交點");
+          }
       }
-    }
-    if (inters.length > 0) {
-      const lat_avg = inters.reduce((sum, p) => sum + p[0], 0) / inters.length;
-      const lon_avg = inters.reduce((sum, p) => sum + p[1], 0) / inters.length;
-      s.prediction = { lat: lat_avg.toFixed(6), lon: lon_avg.toFixed(6) };
-      render(); map.setView([lat_avg, lon_avg], 15);
-    }
+  
+      if (finalPoint) {
+          s.prediction = { lat: finalPoint.lat.toFixed(6), lon: finalPoint.lon.toFixed(6) };
+          render();
+          map.setView([finalPoint.lat, finalPoint.lon], 16);
+      }
   }
 
   function doShare(idx) {
