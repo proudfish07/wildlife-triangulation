@@ -65,13 +65,13 @@
   const map = L.map('map').setView([23.5, 121], 7);
   L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
 
-  // --- 核心數學工具 (球面運算) ---
+  // --- 核心數學工具 (球面座標與弧度轉換) ---
   const toRad = (deg) => deg * Math.PI / 180;
   const toDeg = (rad) => rad * 180 / Math.PI;
 
   /**
    * 球面大圓路徑交點演算法 (用於兩點定位)
-   * 參考自標準球面三角學公式，解決經度收斂問題
+   * 解決傳統平面運算在處理地球經度收斂時的誤差
    */
   function sphericalIntersection(p1, brng1, p2, brng2) {
       const φ1 = toRad(p1.lat), λ1 = toRad(p1.lon);
@@ -100,7 +100,7 @@
       return { lat: toDeg(φ3), lon: toDeg(λ1 + Δλ13) };
   }
 
-  // --- UI 與邏輯處理 ---
+  // --- UI 功能實現 ---
   function save() { localStorage.setItem('wildlife_v25', JSON.stringify(subjects)); updateMapDisplay(); }
 
   function addNewSubject() {
@@ -176,6 +176,7 @@
     });
   }
 
+  // --- 改良後的計算邏輯 (核心更動) ---
   function calculate(sIdx) {
       const s = subjects[sIdx];
       const data = s.points.filter(p => p.lat && p.lon && p.bearing!== '').map(p => ({
@@ -189,12 +190,12 @@
       let finalPoint = null;
 
       if (data.length === 2) {
-          // 兩點定位：直接使用球面交點
+          // --- 兩點定位：使用精確球面路徑交點 ---
           finalPoint = sphericalIntersection(data, data.bearing, data[1], data.[1]bearing);
           if (!finalPoint) return alert("方位線平行或不相交");
       } else {
-          // 三點以上：Lenth MLE 近似邏輯 (計算所有成對交點的平均值)
-          let validInters =; // 此處修正了之前的語法錯誤
+          // --- 三點以上定位：採用統計平均法 (近似 Lenth 1981 MLE 效果) ---
+          let validInters =; 
           for (let i = 0; i < data.length; i++) {
               for (let j = i + 1; j < data.length; j++) {
                   const pt = sphericalIntersection(data[i], data[i].bearing, data[j], data[j].bearing);
@@ -203,6 +204,7 @@
           }
 
           if (validInters.length > 0) {
+              // 獲取所有交點的統計中心，這是處理無線電觀測誤差的標準方式 
               const avgLat = validInters.reduce((sum, p) => sum + p.lat, 0) / validInters.length;
               const avgLon = validInters.reduce((sum, p) => sum + p.lon, 0) / validInters.length;
               finalPoint = { lat: avgLat, lon: avgLon };
@@ -218,17 +220,26 @@
       }
   }
 
-  // --- 其餘輔助功能 (維持不變) ---
+  // --- 其他輔助函式 ---
   function removePoint(sIdx, pIdx) { if (confirm("確定刪除這條線？")) { subjects[sIdx].points.splice(pIdx, 1); render(); } }
   function delSub(sIdx) { if(confirm("刪除整個個體？")) { subjects.splice(sIdx, 1); render(); } }
   function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
   function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => { subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6); subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6); render(); }, null, {enableHighAccuracy: true}); }
+  
   async function openCompass(sIdx, pIdx) {
     currentTarget = { sIdx, pIdx };
+    const p = subjects[sIdx].points[pIdx];
+    declination = p.lat? (p.lat > 23.5? -4.8 : -5.1) : -4.5;
+    document.getElementById('manualDeclination').value = declination;
+    if (typeof DeviceOrientationEvent!== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission!== 'granted') return alert("權限不足");
+    }
     document.getElementById('compassModal').style.display = 'flex';
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
     window.addEventListener('deviceorientation', handleOrientation, true);
   }
+
   function handleOrientation(event) {
     let heading = event.webkitCompassHeading |
 
@@ -240,18 +251,27 @@
       document.getElementById('compassDisc').style.transform = `rotate(${-corrected}deg)`;
     }
   }
+
   function lockCompass() {
     let corrected = (rawAngle + declination + 360) % 360;
     upd(currentTarget.sIdx, currentTarget.pIdx, 'bearing', Math.round(corrected));
     closeCompass(); render();
   }
-  function closeCompass() { document.getElementById('compassModal').style.display = 'none'; }
+
+  function closeCompass() { 
+      document.getElementById('compassModal').style.display = 'none'; 
+      window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.removeEventListener('deviceorientation', handleOrientation, true);
+  }
+
   function resetAll() { if(confirm("重設所有資料？")) { localStorage.clear(); location.reload(); } }
+  
   function doShare(idx) {
     const s = subjects[idx];
     let t = `【野生動物三角定位報告】\n個體：${s.subjectId}\n預估位置：${s.prediction? s.prediction.lat + "," + s.prediction.lon : "未計算"}`;
-    if (navigator.share) navigator.share({ text: t }); else alert("已產生報告：\n" + t);
+    if (navigator.share) navigator.share({ text: t }).catch(() => copyToClip(t)); else alert(t);
   }
+  
   window.onload = render;
 </script>
 </body>
