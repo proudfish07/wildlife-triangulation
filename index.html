@@ -2,277 +2,341 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>野生動物追蹤定位系統</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wildlife Triangulation Tool</title>
+  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    :root { --primary: #2c3e50; --accent: #d35400; --bg: #ecf0f1; --danger: #e74c3c; }
-    body { margin: 0; font-family: -apple-system, sans-serif; background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
-    #map { height: 35vh; width: 100%; shrink: 0; z-index: 1; border-bottom: 2px solid #ccc; }
-    .content { flex: 1; overflow-y: auto; padding: 12px; padding-bottom: 120px; }
-    .subject-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 8px solid var(--subject-color); position: relative; }
-    .subject-id-input { font-size: 1.3rem; font-weight: bold; border: none; width: 70%; color: var(--subject-color); outline: none; background: transparent; border-bottom: 1px dashed #ccc; }
-    .obs-item { background: #fdfdfd; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 15px; position: relative; }
-    .btn-remove-line { position: absolute; top: -10px; right: -10px; background: var(--danger); color: white; border: 2px solid white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; z-index: 10; }
-    .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-    label { font-size: 0.7rem; color: #95a5a6; display: block; margin-bottom: 2px; }
-    input { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
-    button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
-    .btn-compass { background: #34495e; color: white; width: 45px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 5px; }
-    .btn-calc { background: var(--subject-color); color: white; flex: 1; }
-    .btn-share { background: #2980b9; color: white; flex: 1; min-width: 100px; }
-    .action-bar { position: fixed; bottom: 0; left: 0; right: 0; width: 100%; background: white; padding: 12px; display: flex !important; gap: 10px; box-shadow: 0 -3px 15px rgba(0,0,0,0.2); box-sizing: border-box; z-index: 9999; }
-    .prediction-box { background: #f0f0f0; color: var(--subject-color); padding: 10px; border-radius: 8px; margin: 10px 0; font-weight: bold; border: 2px solid var(--subject-color); }
-    #compassModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; color: white; flex-direction: column; align-items: center; justify-content: center; }
-    .compass-disc { width: 180px; height: 180px; border: 3px solid white; border-radius: 50%; position: relative; margin: 20px; transition: transform 0.1s linear; }
-    .note-input { width: 100%; margin-top: 5px; padding: 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 0.85rem; background: #fffde7; }
-    .bearing-indicator { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
+    body { margin: 0; font-family: sans-serif; }
+    #map { height: 60vh; }
+    .input-panel { padding: 1rem; }
+    .input-panel button { margin: 0.5rem 0.5rem 0.5rem 0; }
+    .input-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .input-table th, .input-table td { padding: 0.5rem; border: 1px solid #ccc; text-align: center; }
+    .input-table input { width: 7em; }
+    .input-table .op-btn { width: 3em; }
+    .example-block { color: #666; font-size: 0.95em; margin-bottom: 0.5em; }
+    .example-block span { font-family: monospace; white-space: pre; }
+    .input-table {
+      display: block;
+      width: 100%;
+      overflow-x: auto;
+      white-space: nowrap;
+      min-width: 600px;
+    }
+    .input-table input {
+      min-width: 4em;
+      max-width: 100%;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    @media (max-width: 600px) {
+      .input-panel {
+        padding: 0.5rem;
+      }
+      .input-table th, .input-table td {
+        padding: 0.25rem;
+        font-size: 0.9em;
+      }
+      .input-table input {
+        min-width: 2em;
+        font-size: 0.95em;
+        padding: 0.2em;
+      }
+      .input-panel button {
+        font-size: 0.9em;
+        padding: 0.3em 0.7em;
+      }
+    }
   </style>
 </head>
 <body>
-
-<div id="map"></div>
-<div class="content" id="subjectContainer"></div>
-
-<div class="action-bar">
-  <button style="flex: 2; background: var(--primary); color: white;" onclick="addNewSubject()">➕ 新增觀測個體</button>
-  <button style="flex: 1; background: #95a5a6; color: white;" onclick="resetAll()">重設</button>
-</div>
-
-<div id="compassModal">
-  <h3>方位讀取 (真北補正)</h3>
-  <div class="compass-disc" id="compassDisc">
-    <div style="position:absolute; top:0; left:50%; width:2px; height:100%; background:white; transform:translateX(-50%);"></div>
-    <div style="position:absolute; top:5px; left:50%; transform:translateX(-50%); font-weight:bold; font-size:1.5rem;">N</div>
+  <div class="input-panel">
+    <h2>觀測記錄與定位</h2>
+    <button onclick="recordPoint()">自動定位</button>
+    <button onclick="clearAllData()">清除所有資料</button>
+    <button onclick="processInput()">交點計算</button>
+    <button onclick="shareLocation()">分享預測位置</button>
+    <div class="example-block">
+      範例：<br>
+      <span>日期,時間,緯度,經度,方位角,gain,強度</span><br>
+      <span>2025-06-11,08:45:00,23.50000,121.00000,40,15,80</span>
+    </div>
+    <table class="input-table" id="inputTable">
+      <thead>
+        <tr>
+          <th>日期</th><th>時間</th><th>緯度</th><th>經度</th>
+          <th>方位角</th><th>gain</th><th>強度</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="inputTableBody"></tbody>
+    </table>
+    <!-- 計算結果不再顯示原資料明細 -->
+    <div id="pointTable"></div>
   </div>
-  <h2 id="liveAngle" style="font-size: 3rem; margin: 10px 0;">0°</h2>
-  <label style="color:white; font-size:0.8rem;">磁偏角：</label>
-  <input type="number" id="manualDeclination" value="-4.5" step="0.1" style="width:80px; text-align:center;">
-  <button onclick="lockCompass()" style="background:var(--accent); color:white; padding:15px 50px; border-radius:30px; margin-top:20px;">鎖定角度</button>
-  <button onclick="closeCompass()" style="background:none; color:white; margin-top:10px;">取消</button>
-</div>
+  <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-  let subjects = JSON.parse(localStorage.getItem('wildlife_v25')) ||;
-  let currentTarget = { sIdx: null, pIdx: null };
-  let rawAngle = 0;
-  let declination = -4.5;
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([23.5, 121], 7);
+    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data: &copy; OpenTopoMap (CC-BY-SA)',
+      maxZoom: 17
+    }).addTo(map);
 
-  const getBearingColor = (angle) => `hsl(${angle % 360}, 80%, 50%)`;
-  const getSubjectColor = (index) => `hsl(${(index * 137.5) % 360}, 65%, 40%)`;
+    let recordedPoints = [];
+    let currentPrediction = null;
+    let currentLocationCircle = null;
 
-  const map = L.map('map').setView([23.5, 121], 7);
-  L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(map);
+    // 儲存到 localStorage
+    function savePointsToStorage() {
+      localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
+    }
 
-  // --- 核心數學工具 (球面座標與弧度轉換) ---
-  const toRad = (deg) => deg * Math.PI / 180;
-  const toDeg = (rad) => rad * 180 / Math.PI;
+    // 從 localStorage 載入
+    function loadPointsFromStorage() {
+      const data = localStorage.getItem('wildlife_points');
+      if (data) {
+        try {
+          recordedPoints = JSON.parse(data);
+        } catch (e) {
+          recordedPoints = [];
+        }
+      }
+      renderInputTable();
+    }
 
-  /**
-   * 球面大圓路徑交點演算法 (用於兩點定位)
-   * 解決傳統平面運算在處理地球經度收斂時的誤差
-   */
-  function sphericalIntersection(p1, brng1, p2, brng2) {
-      const φ1 = toRad(p1.lat), λ1 = toRad(p1.lon);
-      const φ2 = toRad(p2.lat), λ2 = toRad(p2.lon);
-      const θ13 = toRad(brng1), θ23 = toRad(brng2);
+    // 清除所有資料
+    function clearAllData() {
+      if (confirm('確定要清除所有資料嗎？此動作無法還原。')) {
+        recordedPoints = [];
+        localStorage.removeItem('wildlife_points');
+        renderInputTable();
+        document.getElementById('pointTable').innerHTML = '';
+        map.eachLayer(layer => {
+          if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
+        });
+        currentPrediction = null;
+        showCurrentLocationOnMap();
+      }
+    }
 
-      const Δφ = φ2 - φ1, Δλ = λ2 - λ1;
-      const δ12 = 2 * Math.asin(Math.sqrt(Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2)));
-      if (δ12 < 1e-10) return null;
+    // 渲染表格
+    function renderInputTable() {
+      const tbody = document.getElementById('inputTableBody');
+      tbody.innerHTML = '';
+      recordedPoints.forEach((p, idx) => {
+        const row = document.createElement('tr');
+        ['date','time','lat','lon','bearing','gain','strength'].forEach(key => {
+          const td = document.createElement('td');
+          const input = document.createElement('input');
+          input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
+          if (key === 'lat' || key === 'lon') input.step = 'any';
+          input.value = (p[key]!==null && p[key]!==undefined) ? p[key] : '';
+          input.oninput = () => {
+            recordedPoints[idx][key] = input.value;
+            savePointsToStorage();
+          };
+          td.appendChild(input);
+          row.appendChild(td);
+        });
+        // 刪除按鈕
+        const tdDel = document.createElement('td');
+        tdDel.className = 'op-btn';
+        const btnDel = document.createElement('button');
+        btnDel.textContent = '刪除';
+        btnDel.onclick = () => {
+          recordedPoints.splice(idx,1);
+          savePointsToStorage();
+          renderInputTable();
+        };
+        tdDel.appendChild(btnDel);
+        row.appendChild(tdDel);
+        tbody.appendChild(row);
+      });
+    }
 
-      const θa = Math.acos((Math.sin(φ2) - Math.sin(φ1) * Math.cos(δ12)) / (Math.sin(δ12) * Math.cos(φ1)));
-      const θb = Math.acos((Math.sin(φ1) - Math.sin(φ2) * Math.cos(δ12)) / (Math.sin(δ12) * Math.cos(φ2)));
-      const θ12 = Math.sin(λ2 - λ1) > 0? θa : 2 * Math.PI - θa;
-      const θ21 = Math.sin(λ2 - λ1) > 0? 2 * Math.PI - θb : θb;
+    function bearingToRadians(b) {
+      return b * Math.PI / 180;
+    }
+    
+    function lineFromPointBearing(lat, lon, bearing) {
+      const angle = bearingToRadians(bearing);
+      const dx = Math.sin(angle);
+      const dy = Math.cos(angle);
+      return { x: lon, y: lat, dx, dy, lat, lon, bearing };
+    }
 
-      const α1 = (θ13 - θ12 + Math.PI) % (2 * Math.PI) - Math.PI;
-      const α2 = (θ21 - θ23 + Math.PI) % (2 * Math.PI) - Math.PI;
-      if (Math.sin(α1) === 0 && Math.sin(α2) === 0) return null;
-      if (Math.sin(α1) * Math.sin(α2) < 0) return null;
+    function getIntersection(line1, line2) {
+      const { x: x1, y: y1, dx: dx1, dy: dy1 } = line1;
+      const { x: x2, y: y2, dx: dx2, dy: dy2 } = line2;
+      const det = dx1 * dy2 - dy1 * dx2;
+      if (Math.abs(det) < 1e-10) return null;
+      const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / det;
+      return [y1 + dy1 * t, x1 + dx1 * t];
+    }
 
-      const α3 = Math.acos(-Math.cos(α1) * Math.cos(α2) + Math.sin(α1) * Math.sin(α2) * Math.cos(δ12));
-      const δ13 = Math.atan2(Math.sin(δ12) * Math.sin(α1) * Math.sin(α2), Math.cos(α2) + Math.cos(α1) * Math.cos(α3));
-      const φ3 = Math.asin(Math.sin(φ1) * Math.cos(δ13) + Math.cos(φ1) * Math.sin(δ13) * Math.cos(θ13));
-      const Δλ13 = Math.atan2(Math.sin(θ13) * Math.sin(δ13) * Math.cos(φ1), Math.cos(δ13) - Math.sin(φ1) * Math.sin(φ3));
-      
-      return { lat: toDeg(φ3), lon: toDeg(λ1 + Δλ13) };
-  }
+    function displayPointsAndCalculate(points) {
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
+      });
+      showCurrentLocationOnMap();
 
-  // --- UI 功能實現 ---
-  function save() { localStorage.setItem('wildlife_v25', JSON.stringify(subjects)); updateMapDisplay(); }
-
-  function addNewSubject() {
-    subjects.push({ id: Date.now(), subjectId: '個體 ' + (subjects.length + 1), color: getSubjectColor(subjects.length), points: [createPoint()], prediction: null });
-    render();
-  }
-
-  function createPoint() {
-    const now = new Date();
-    return { date: now.toISOString().split('T'), time: now.toTimeString().split(' ').substring(0, 5), lat: '', lon: '', bearing: '', gain: '', strength: '', note: '' };
-  }
-
-  function render() {
-    const container = document.getElementById('subjectContainer');
-    container.innerHTML = '';
-    subjects.forEach((s, sIdx) => {
-      const card = document.createElement('div');
-      card.className = 'subject-card';
-      card.style.setProperty('--subject-color', s.color);
-      card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <input class="subject-id-input" style="color:${s.color}" value="${s.subjectId}" onchange="subjects[${sIdx}].subjectId=this.value;save();">
-            <button onclick="delSub(${sIdx})" style="background:none; color:var(--danger); font-size:0.75rem;">刪除個體</button>
-        </div>
-        ${s.points.map((p, pIdx) => `
-          <div class="obs-item">
-            <div class="btn-remove-line" onclick="removePoint(${sIdx}, ${pIdx})">✕</div>
-            <div class="input-row">
-              <div><label>緯度</label><input type="number" step="any" value="${p.lat}" onchange="upd(${sIdx},${pIdx},'lat',this.value)"></div>
-              <div><label>經度</label><input type="number" step="any" value="${p.lon}" onchange="upd(${sIdx},${pIdx},'lon',this.value)"></div>
-            </div>
-            <button style="width:100%; margin-bottom:8px; background:#f0f0f0; border:1px solid #ccc; padding:8px;" onclick="getGPS(${sIdx},${pIdx})">📍 抓取 GPS</button>
-            <div class="input-row">
-              <div style="grid-column: span 2; display:flex; gap:5px; align-items:flex-end;">
-                <div style="flex:1;">
-                  <label><span class="bearing-indicator" style="background:${p.bearing!== ''? getBearingColor(p.bearing) : '#ccc'}"></span>方位角(真北°)</label>
-                  <input type="number" value="${p.bearing}" onchange="upd(${sIdx},${pIdx},'bearing',this.value)">
-                </div>
-                <button class="btn-compass" onclick="openCompass(${sIdx},${pIdx})">🧭</button>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-        <button style="margin:10px 0; width:100%; border:2px dashed #ddd; background:none; padding:12px; border-radius:8px;" onclick="subjects[${sIdx}].points.push(createPoint());render();">＋ 新增方位線</button>
-        ${s.prediction? `<div class="prediction-box">🎯 預估交點：${s.prediction.lat}, ${s.prediction.lon}</div>` : ''}
-        <div style="display:flex; gap:10px; margin-top:10px;">
-          <button class="btn-calc" onclick="calculate(${sIdx})">📐 計算交點</button>
-          <button class="btn-share" onclick="doShare(${sIdx})">📤 分享報告</button>
-        </div>
-      `;
-      container.appendChild(card);
-    });
-    save();
-  }
-
-  function updateMapDisplay() {
-    map.eachLayer(l => { if(l instanceof L.Marker |
-
-| l instanceof L.Polyline |
-| l instanceof L.CircleMarker) map.removeLayer(l); });
-    subjects.forEach(s => {
-      s.points.forEach(p => {
-        if(p.lat && p.lon) {
-          L.circleMarker([p.lat, p.lon], {radius: 6, color: s.color, fillColor: s.color, fillOpacity: 0.8}).addTo(map);
-          if(p.bearing!== '') {
-            const angleRad = (90 - parseFloat(p.bearing)) * (Math.PI / 180);
-            const end =;
-            L.polyline([[p.lat, p.lon], end], {color: getBearingColor(p.bearing), weight: 3, dashArray: '5, 8', opacity: 0.9}).addTo(map);
-          }
+      // 只放交點計算結果，不再重複呈現原資料
+      const validLines = [];
+      points.forEach((p, idx) => {
+        const lat = parseFloat(p.lat);
+        const lon = parseFloat(p.lon);
+        const bearing = parseFloat(p.bearing);
+        if (!isNaN(lat) && !isNaN(lon) && !isNaN(bearing)) {
+          validLines.push(lineFromPointBearing(lat, lon, bearing));
+          // 用hsl的色相直接根據bearing決定顏色
+          const color = `hsl(${Math.round(bearing % 360)}, 80%, 50%)`;
+          const marker = L.circleMarker([lat, lon], {
+            radius: 7,
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.9
+          }).addTo(map).bindPopup(
+            `觀測點 ${idx + 1}<br>座標: ${lat}, ${lon}<br>方位角: ${bearing}°`
+          );
+          const angle = bearingToRadians(bearing);
+          const endLat = lat + Math.cos(angle) * 0.1;
+          const endLon = lon + Math.sin(angle) * 0.1;
+          // 彩色方位角線
+          L.polyline([[lat, lon], [endLat, endLon]], { color: color }).addTo(map);
         }
       });
-      if(s.prediction) L.marker([s.prediction.lat, s.prediction.lon]).addTo(map).bindPopup(s.subjectId).openPopup();
-    });
-  }
 
-  // --- 改良後的計算邏輯 (核心更動) ---
-  function calculate(sIdx) {
-      const s = subjects[sIdx];
-      const data = s.points.filter(p => p.lat && p.lon && p.bearing!== '').map(p => ({
-          lat: parseFloat(p.lat),
-          lon: parseFloat(p.lon),
-          bearing: parseFloat(p.bearing)
-      }));
+      let intersections = [];
+      for (let i = 0; i < validLines.length; i++) {
+        for (let j = i + 1; j < validLines.length; j++) {
+          const inter = getIntersection(validLines[i], validLines[j]);
+          if (inter) intersections.push(inter);
+        }
+      }
 
-      if (data.length < 2) return alert("至少需要兩組方位數據");
+      if (intersections.length > 0) {
+        const avgLat = intersections.reduce((sum, p) => sum + p[0], 0) / intersections.length;
+        const avgLon = intersections.reduce((sum, p) => sum + p[1], 0) / intersections.length;
+        currentPrediction = { lat: avgLat, lon: avgLon };
+        L.marker([avgLat, avgLon], { color: 'blue' }).addTo(map)
+          .bindPopup(`預測位置<br>座標: ${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}`).openPopup();
+        map.setView([avgLat, avgLon], 13);
 
-      let finalPoint = null;
-
-      if (data.length === 2) {
-          // --- 兩點定位：使用精確球面路徑交點 ---
-          finalPoint = sphericalIntersection(data, data.bearing, data[1], data.[1]bearing);
-          if (!finalPoint) return alert("方位線平行或不相交");
+        document.getElementById('pointTable').innerHTML =
+          `<div style="margin-top:1em;">交點平均位置：<br>緯度: ${avgLat.toFixed(5)}，經度: ${avgLon.toFixed(5)}</div>`;
       } else {
-          // --- 三點以上定位：採用統計平均法 (近似 Lenth 1981 MLE 效果) ---
-          let validInters =; 
-          for (let i = 0; i < data.length; i++) {
-              for (let j = i + 1; j < data.length; j++) {
-                  const pt = sphericalIntersection(data[i], data[i].bearing, data[j], data[j].bearing);
-                  if (pt) validInters.push(pt);
-              }
-          }
-
-          if (validInters.length > 0) {
-              // 獲取所有交點的統計中心，這是處理無線電觀測誤差的標準方式 
-              const avgLat = validInters.reduce((sum, p) => sum + p.lat, 0) / validInters.length;
-              const avgLon = validInters.reduce((sum, p) => sum + p.lon, 0) / validInters.length;
-              finalPoint = { lat: avgLat, lon: avgLon };
-          } else {
-              return alert("數據過於發散，無法形成有效交點");
-          }
+        currentPrediction = null;
+        document.getElementById('pointTable').innerHTML = '';
       }
+    }
 
-      if (finalPoint) {
-          s.prediction = { lat: finalPoint.lat.toFixed(6), lon: finalPoint.lon.toFixed(6) };
-          render();
-          map.setView([finalPoint.lat, finalPoint.lon], 16);
+    // 按下交點計算時
+    function processInput() {
+      // 先同步表格資料
+      const tableRows = document.querySelectorAll('#inputTableBody tr');
+      recordedPoints = Array.from(tableRows).map(tr => {
+        const tds = tr.querySelectorAll('td input');
+        return {
+          date: tds[0].value.trim(),
+          time: tds[1].value.trim(),
+          lat: tds[2].value.trim(),
+          lon: tds[3].value.trim(),
+          bearing: tds[4].value.trim(),
+          gain: tds[5].value.trim(),
+          strength: tds[6].value.trim()
+        }
+      });
+      savePointsToStorage();
+      displayPointsAndCalculate(recordedPoints);
+    }
+
+    // 手動定位按鈕
+    function recordPoint() {
+      if (!navigator.geolocation) {
+        alert('裝置不支援定位');
+        return;
       }
-  }
-
-  // --- 其他輔助函式 ---
-  function removePoint(sIdx, pIdx) { if (confirm("確定刪除這條線？")) { subjects[sIdx].points.splice(pIdx, 1); render(); } }
-  function delSub(sIdx) { if(confirm("刪除整個個體？")) { subjects.splice(sIdx, 1); render(); } }
-  function upd(sIdx, pIdx, key, val) { subjects[sIdx].points[pIdx][key] = val; save(); }
-  function getGPS(sIdx, pIdx) { navigator.geolocation.getCurrentPosition(pos => { subjects[sIdx].points[pIdx].lat = pos.coords.latitude.toFixed(6); subjects[sIdx].points[pIdx].lon = pos.coords.longitude.toFixed(6); render(); }, null, {enableHighAccuracy: true}); }
-  
-  async function openCompass(sIdx, pIdx) {
-    currentTarget = { sIdx, pIdx };
-    const p = subjects[sIdx].points[pIdx];
-    declination = p.lat? (p.lat > 23.5? -4.8 : -5.1) : -4.5;
-    document.getElementById('manualDeclination').value = declination;
-    if (typeof DeviceOrientationEvent!== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission!== 'granted') return alert("權限不足");
+      navigator.geolocation.getCurrentPosition(pos => {
+        const now = new Date();
+        const pad = n => n < 10 ? '0' + n : n;
+        const date = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+        const time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+        recordedPoints.push({
+          date: date,
+          time: time,
+          lat: pos.coords.latitude.toFixed(5),
+          lon: pos.coords.longitude.toFixed(5),
+          bearing: '',
+          gain: '',
+          strength: ''
+        });
+        savePointsToStorage();
+        renderInputTable();
+        alert(`已記錄座標：\n日期: ${date}\n時間: ${time}\n緯度: ${pos.coords.latitude.toFixed(5)}, 經度: ${pos.coords.longitude.toFixed(5)}\n請在表格輸入方位角、gain、強度`);
+        showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
+      }, () => alert('無法取得定位資訊'));
     }
-    document.getElementById('compassModal').style.display = 'flex';
-    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-    window.addEventListener('deviceorientation', handleOrientation, true);
-  }
 
-  function handleOrientation(event) {
-    let heading = event.webkitCompassHeading |
+    function shareLocation() {
+      if (!recordedPoints.length) {
+        alert('沒有觀測資料可分享');
+        return;
+      }
+      let text = '';
+      text += '【野生動物三角定位觀測紀錄】\n';
+      text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度）：\n';
+      recordedPoints.forEach((p, i) => {
+        text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''}\n`;
+      });
+      if (currentPrediction) {
+        text += `\n預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
+        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
+      }
+      text += `\n網址：${location.href}`;
 
-| (360 - event.alpha);
-    if (heading) {
-      rawAngle = heading;
-      let corrected = (rawAngle + declination + 360) % 360;
-      document.getElementById('liveAngle').innerText = Math.round(corrected) + "°";
-      document.getElementById('compassDisc').style.transform = `rotate(${-corrected}deg)`;
+      if (navigator.share) {
+        navigator.share({
+          title: '野生動物預測位置',
+          text,
+          url: location.href
+        }).catch(err => console.error('分享失敗', err));
+      } else {
+        prompt('請手動複製以下資訊分享：', text);
+      }
     }
-  }
 
-  function lockCompass() {
-    let corrected = (rawAngle + declination + 360) % 360;
-    upd(currentTarget.sIdx, currentTarget.pIdx, 'bearing', Math.round(corrected));
-    closeCompass(); render();
-  }
+    // 用藍色小圓點顯示目前位置
+    function showCurrentLocationOnMap(lat=null, lon=null) {
+      if (lat === null || lon === null) {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(pos => {
+            showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
+          });
+        }
+        return;
+      }
+      if (currentLocationCircle) {
+        map.removeLayer(currentLocationCircle);
+      }
+      currentLocationCircle = L.circleMarker([lat, lon], {
+        radius: 8,
+        color: '#007bff',
+        fillColor: '#339CFF',
+        fillOpacity: 0.8
+      }).addTo(map).bindPopup("你現在的位置").openPopup();
+    }
 
-  function closeCompass() { 
-      document.getElementById('compassModal').style.display = 'none'; 
-      window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
-      window.removeEventListener('deviceorientation', handleOrientation, true);
-  }
+    window.onload = function () {
+      loadPointsFromStorage();
+      showCurrentLocationOnMap();
+    };
 
-  function resetAll() { if(confirm("重設所有資料？")) { localStorage.clear(); location.reload(); } }
-  
-  function doShare(idx) {
-    const s = subjects[idx];
-    let t = `【野生動物三角定位報告】\n個體：${s.subjectId}\n預估位置：${s.prediction? s.prediction.lat + "," + s.prediction.lon : "未計算"}`;
-    if (navigator.share) navigator.share({ text: t }).catch(() => copyToClip(t)); else alert(t);
-  }
-  
-  window.onload = render;
-</script>
+    // PWA service worker 註冊（如需離線，請備妥 sw.js）
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
 </body>
 </html>
