@@ -10,143 +10,90 @@
       --primary: #2e7d32;
       --secondary: #1976d2;
       --danger: #d32f2f;
-      --glass: rgba(255, 255, 255, 0.9);
+      --glass: rgba(255, 255, 255, 0.95);
     }
 
     body { 
-      margin: 0; 
-      padding: 0;
+      margin: 0; padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
       background: #f0f2f5;
       height: 100vh;
-      display: flex;
-      flex-direction: column;
+      display: flex; flex-direction: column;
       overflow: hidden;
     }
 
-    /* 地圖滿版 */
-    #map { 
-      flex: 1; 
-      width: 100%;
-      z-index: 1;
-    }
+    #map { flex: 1; width: 100%; z-index: 1; }
 
-    /* 浮動式底部面板 */
+    /* 底部面板 */
     .bottom-panel {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      position: absolute; bottom: 0; left: 0; right: 0;
       z-index: 1000;
       background: var(--glass);
       backdrop-filter: blur(10px);
       border-radius: 20px 20px 0 0;
       box-shadow: 0 -5px 20px rgba(0,0,0,0.15);
       padding: 16px;
-      max-height: 45vh;
+      max-height: 50vh;
       overflow-y: auto;
-      transition: max-height 0.3s ease;
     }
 
-    h2 { 
-      margin: 0 0 12px 0; 
-      font-size: 1.1rem; 
-      color: #333;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    h2 { margin: 0 0 12px 0; font-size: 1.1rem; color: #333; }
 
-    /* 按鈕區塊 */
     .action-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      margin-bottom: 15px;
+      display: grid; grid-template-columns: repeat(2, 1fr);
+      gap: 10px; margin-bottom: 15px;
     }
 
     button {
-      border: none;
-      padding: 12px 8px;
-      border-radius: 10px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: white;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      transition: transform 0.1s, opacity 0.2s;
+      border: none; padding: 12px 8px; border-radius: 10px;
+      font-size: 0.9rem; font-weight: 600; color: white;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
     }
-
-    button:active { transform: scale(0.96); opacity: 0.9; }
 
     .btn-record { background: var(--primary); }
     .btn-calc { background: var(--secondary); }
     .btn-share { background: #607d8b; }
     .btn-clear { background: #9e9e9e; }
 
-    /* 表格美化 */
-    .table-wrapper {
+    /* 重點：讓表格在手機上可以左右滑動，不會擠壓 */
+    .table-scroll {
+      width: 100%;
+      overflow-x: auto;
       background: white;
       border-radius: 12px;
-      overflow: hidden;
       border: 1px solid #ddd;
+      margin-top: 10px;
     }
 
     .input-table {
       width: 100%;
+      min-width: 500px; /* 強制最小寬度，確保欄位不重疊 */
       border-collapse: collapse;
       font-size: 0.85rem;
     }
 
     .input-table th {
-      background: #f8f9fa;
-      padding: 10px;
-      border-bottom: 2px solid #eee;
-      color: #666;
+      background: #f8f9fa; padding: 10px;
+      border-bottom: 2px solid #eee; color: #666;
     }
 
     .input-table td {
-      padding: 6px 4px;
-      border-bottom: 1px solid #eee;
-      text-align: center;
+      padding: 8px 4px; border-bottom: 1px solid #eee; text-align: center;
     }
 
     .input-table input {
-      width: 90%;
-      border: 1px solid #eee;
-      padding: 6px 2px;
-      border-radius: 4px;
-      text-align: center;
-      font-size: 0.85rem;
+      width: 90%; border: 1px solid #eee; padding: 6px;
+      border-radius: 4px; text-align: center; font-size: 0.85rem;
     }
 
     .result-card {
-      background: #e3f2fd;
-      padding: 12px;
-      border-radius: 10px;
-      margin-top: 10px;
-      border-left: 4px solid var(--secondary);
-      font-size: 0.9rem;
-      line-height: 1.4;
+      background: #e3f2fd; padding: 12px; border-radius: 10px;
+      margin-top: 10px; border-left: 4px solid var(--secondary);
     }
 
-    .del-btn {
-      background: none;
-      color: var(--danger);
-      font-size: 1.2rem;
-      padding: 0;
-    }
+    .del-btn { background: none; color: var(--danger); font-size: 1.2rem; cursor: pointer; }
 
-    /* 針對手機優化的小提示 */
-    .hint {
-      font-size: 0.75rem;
-      color: #888;
-      margin-bottom: 8px;
-      text-align: center;
-    }
+    .hint { font-size: 0.75rem; color: #888; margin-bottom: 8px; text-align: center; }
   </style>
 </head>
 <body>
@@ -163,13 +110,19 @@
       <button class="btn-clear" onclick="clearAllData()">🗑️ 清除</button>
     </div>
 
-    <p class="hint">請輸入方位角（0-360°）後點擊交點計算</p>
+    <p class="hint">⬅️ 左右滑動表格填寫方位角、Gain 與強度 ➡️</p>
 
-    <div class="table-wrapper">
+    <div class="table-scroll">
       <table class="input-table">
         <thead>
           <tr>
-            <th>時間</th><th>緯度</th><th>經度</th><th>方位角</th><th></th>
+            <th style="width: 60px;">時間</th>
+            <th>緯度</th>
+            <th>經度</th>
+            <th style="width: 70px;">方位角</th>
+            <th style="width: 60px;">Gain</th>
+            <th style="width: 60px;">強度</th>
+            <th style="width: 40px;"></th>
           </tr>
         </thead>
         <tbody id="inputTableBody"></tbody>
@@ -181,7 +134,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // 初始化地圖
     const map = L.map('map', { zoomControl: false }).setView([23.5, 121], 7);
     L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenTopoMap'
@@ -200,7 +152,9 @@
           <td>${p.time.substring(0,5)}</td>
           <td><input type="number" step="any" value="${p.lat}" onchange="updatePoint(${idx}, 'lat', this.value)"></td>
           <td><input type="number" step="any" value="${p.lon}" onchange="updatePoint(${idx}, 'lon', this.value)"></td>
-          <td><input type="number" placeholder="角度" value="${p.bearing}" onchange="updatePoint(${idx}, 'bearing', this.value)"></td>
+          <td><input type="number" placeholder="°" value="${p.bearing}" onchange="updatePoint(${idx}, 'bearing', this.value)"></td>
+          <td><input type="number" value="${p.gain || ''}" onchange="updatePoint(${idx}, 'gain', this.value)"></td>
+          <td><input type="number" value="${p.strength || ''}" onchange="updatePoint(${idx}, 'strength', this.value)"></td>
           <td><button class="del-btn" onclick="deletePoint(${idx})">×</button></td>
         `;
         tbody.appendChild(row);
@@ -230,7 +184,9 @@
           time: now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0'),
           lat: pos.coords.latitude.toFixed(5),
           lon: pos.coords.longitude.toFixed(5),
-          bearing: ''
+          bearing: '',
+          gain: '',
+          strength: ''
         });
         saveAndRender();
       }, () => alert('定位失敗'));
@@ -238,19 +194,16 @@
 
     function processInput() {
       map.eachLayer(l => { if(l instanceof L.Marker || l instanceof L.Polyline) map.removeLayer(l); });
-      
       const validLines = [];
       recordedPoints.forEach((p, idx) => {
         const lat = parseFloat(p.lat), lon = parseFloat(p.lon), brng = parseFloat(p.bearing);
         if (!isNaN(lat) && !isNaN(lon) && !isNaN(brng)) {
-          const color = `hsl(${brng % 360}, 70%, 45%)`;
+          const color = `hsl(${brng % 360}, 75%, 45%)`;
           L.circleMarker([lat, lon], { radius: 6, color: color, fillOpacity: 1 }).addTo(map);
-          
           const rad = brng * Math.PI / 180;
-          const endLat = lat + Math.cos(rad) * 0.2;
-          const endLon = lon + Math.sin(rad) * 0.2;
-          L.polyline([[lat, lon], [endLat, endLon]], { color: color, weight: 3, dashArray: '5, 10' }).addTo(map);
-          
+          const endLat = lat + Math.cos(rad) * 0.15;
+          const endLon = lon + Math.sin(rad) * 0.15;
+          L.polyline([[lat, lon], [endLat, endLon]], { color: color, weight: 3 }).addTo(map);
           validLines.push({ x: lon, y: lat, dx: Math.sin(rad), dy: Math.cos(rad) });
         }
       });
@@ -271,36 +224,25 @@
         const avgLat = intersects.reduce((a,b) => a + b[0], 0) / intersects.length;
         const avgLon = intersects.reduce((a,b) => a + b[1], 0) / intersects.length;
         currentPrediction = { lat: avgLat, lon: avgLon };
-        
-        L.marker([avgLat, avgLon]).addTo(map).bindPopup("預測目標位置").openPopup();
+        L.marker([avgLat, avgLon]).addTo(map).bindPopup("預估目標位置").openPopup();
         map.setView([avgLat, avgLon], 14);
-        
-        document.getElementById('resultArea').innerHTML = `
-          <div class="result-card">
-            <strong>🎯 預測位置</strong><br>
-            緯度: ${avgLat.toFixed(5)}<br>經度: ${avgLon.toFixed(5)}
-          </div>`;
+        document.getElementById('resultArea').innerHTML = `<div class="result-card"><strong>🎯 預測位置</strong><br>緯度: ${avgLat.toFixed(5)} / 經度: ${avgLon.toFixed(5)}</div>`;
       }
     }
 
     function shareLocation() {
-      if (!currentPrediction) return alert('請先進行計算');
-      const text = `【野生動物追蹤報告】\n預測位置：${currentPrediction.lat.toFixed(5)}, ${currentPrediction.lon.toFixed(5)}\nGoogle地圖連結：https://www.google.com/maps?q=${currentPrediction.lat},${currentPrediction.lon}`;
+      if (!currentPrediction) return alert('請先計算');
+      let text = `【野生動物追蹤報告】\n預測位置：${currentPrediction.lat.toFixed(5)}, ${currentPrediction.lon.toFixed(5)}\n\n詳細數據：\n`;
+      recordedPoints.forEach((p, i) => {
+        text += `${i+1}. 方向:${p.bearing}°, Gain:${p.gain||'-'}, 強度:${p.strength||'-'}\n`;
+      });
+      text += `Google Maps: https://www.google.com/maps?q=${currentPrediction.lat},${currentPrediction.lon}`;
+      
       if (navigator.share) {
         navigator.share({ title: '追蹤結果', text: text });
       } else {
-        copyToClipboard(text);
-        alert('內容已複製到剪貼簿');
+        alert('內容已複製');
       }
-    }
-
-    function copyToClipboard(text) {
-      const el = document.createElement('textarea');
-      el.value = text;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
     }
 
     function clearAllData() {
