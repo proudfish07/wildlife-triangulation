@@ -10,14 +10,15 @@
       --primary: #2e7d32;
       --secondary: #1976d2;
       --danger: #d32f2f;
-      --glass: rgba(255, 255, 255, 0.95);
+      --glass: rgba(255, 255, 255, 0.98);
     }
 
-    body { 
+    /* 解決手機瀏覽器 100vh 顯示不全問題 */
+    html, body { 
       margin: 0; padding: 0;
+      height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
       background: #f0f2f5;
-      height: 100vh;
       display: flex; flex-direction: column;
       overflow: hidden;
     }
@@ -25,7 +26,7 @@
     #map { flex: 1; width: 100%; z-index: 1; }
 
     .bottom-panel {
-      position: absolute; bottom: 0; left: 0; right: 0;
+      position: relative; /* 改為相對定位，避免被地圖遮擋 */
       z-index: 1000;
       background: var(--glass);
       backdrop-filter: blur(10px);
@@ -33,18 +34,25 @@
       box-shadow: 0 -5px 20px rgba(0,0,0,0.15);
       padding: 16px;
       max-height: 55vh;
-      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sticky-controls {
+      flex-shrink: 0;
+      margin-bottom: 12px;
     }
 
     .action-grid {
       display: grid; grid-template-columns: repeat(2, 1fr);
-      gap: 10px; margin-bottom: 15px;
+      gap: 10px;
     }
 
     button {
       border: none; padding: 12px 8px; border-radius: 10px;
-      font-size: 0.9rem; font-weight: 600; color: white;
+      font-size: 0.95rem; font-weight: 700; color: white;
       cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
     .btn-record { background: var(--primary); }
@@ -55,46 +63,43 @@
     .table-scroll {
       width: 100%;
       overflow-x: auto;
+      overflow-y: auto;
       background: white;
       border-radius: 12px;
       border: 1px solid #ddd;
+      flex: 1;
     }
 
     .input-table {
-      width: 100%;
-      min-width: 700px; /* 增加寬度以容納新欄位 */
-      border-collapse: collapse;
-      font-size: 0.8rem;
+      width: 100%; min-width: 800px;
+      border-collapse: collapse; font-size: 0.85rem;
     }
 
     .input-table th {
-      background: #f8f9fa; padding: 8px;
-      border-bottom: 2px solid #eee; color: #666;
+      background: #f8f9fa; padding: 10px;
+      position: sticky; top: 0; z-index: 2;
     }
 
-    .input-table td {
-      padding: 6px 4px; border-bottom: 1px solid #eee; text-align: center;
-    }
+    .input-table td { padding: 8px 4px; border-bottom: 1px solid #eee; text-align: center; }
 
     .input-table input {
-      width: 95%; border: 1px solid #eee; padding: 6px 2px;
-      border-radius: 4px; text-align: center; font-size: 0.8rem;
+      width: 90%; border: 1px solid #eee; padding: 8px 2px;
+      border-radius: 4px; text-align: center; font-size: 0.85rem;
     }
 
-    /* 活動狀態按鈕樣式 */
     .btn-active-status {
-      padding: 4px 8px; border-radius: 5px; font-size: 0.75rem; width: 45px;
+      padding: 6px 4px; border-radius: 6px; font-size: 0.8rem; width: 55px; border: 1px solid #ccc; font-weight: bold;
     }
-    .status-yes { background: #e8f5e9; color: #2e7d32; border: 1px solid #2e7d32; }
-    .status-no { background: #ffebee; color: #c62828; border: 1px solid #c62828; }
+    .status-yes { background: #c8e6c9 !important; color: #1b5e20 !important; border-color: #2e7d32; }
+    .status-no { background: #ffcdd2 !important; color: #b71c1c !important; border-color: #d32f2f; }
 
     .result-card {
       background: #e3f2fd; padding: 12px; border-radius: 10px;
       margin-top: 10px; border-left: 4px solid var(--secondary);
     }
 
-    .del-btn { background: none; color: var(--danger); font-size: 1.2rem; }
-    .hint { font-size: 0.75rem; color: #888; margin-bottom: 8px; text-align: center; }
+    .del-btn { background: none; color: var(--danger); font-size: 1.5rem; line-height: 1; }
+    .hint { font-size: 0.75rem; color: #888; margin-top: 8px; text-align: center; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -102,28 +107,29 @@
   <div id="map"></div>
 
   <div class="bottom-panel">
-    <div class="action-grid">
-      <button class="btn-record" onclick="recordPoint()">📍 自動定位</button>
-      <button class="btn-calc" onclick="processInput()">📐 交點計算</button>
-      <button class="btn-share" onclick="shareLocation()">📤 分享報表</button>
-      <button class="btn-clear" onclick="clearAllData()">🗑️ 清除</button>
+    <div class="sticky-controls">
+      <div class="action-grid">
+        <button class="btn-record" onclick="recordPoint()">📍 自動定位</button>
+        <button class="btn-calc" onclick="processInput()">📐 交點計算</button>
+        <button class="btn-share" onclick="handleShare()">📤 分享報表</button>
+        <button class="btn-clear" onclick="clearAllData()">🗑️ 清除</button>
+      </div>
+      <p class="hint">⬅️ 左右滑動填寫數據 | 分享按鈕已修正 ➡️</p>
     </div>
-
-    <p class="hint">⬅️ 左右滑動填寫：日期 | 時間 | 方位 | Gain | 強度 | 活動 ➡️</p>
 
     <div class="table-scroll">
       <table class="input-table">
         <thead>
           <tr>
-            <th style="width: 85px;">日期</th>
-            <th style="width: 60px;">時間</th>
-            <th style="width: 80px;">緯度</th>
-            <th style="width: 80px;">經度</th>
-            <th style="width: 60px;">方位</th>
-            <th style="width: 50px;">Gain</th>
-            <th style="width: 50px;">強度</th>
-            <th style="width: 60px;">活動</th>
-            <th style="width: 30px;"></th>
+            <th style="width: 110px;">日期</th>
+            <th style="width: 80px;">時間</th>
+            <th style="width: 100px;">緯度</th>
+            <th style="width: 100px;">經度</th>
+            <th style="width: 80px;">方位°</th>
+            <th style="width: 70px;">Gain</th>
+            <th style="width: 70px;">強度</th>
+            <th style="width: 80px;">活動</th>
+            <th style="width: 50px;"></th>
           </tr>
         </thead>
         <tbody id="inputTableBody"></tbody>
@@ -135,6 +141,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+    // 初始化地圖
     const map = L.map('map', { zoomControl: false }).setView([23.5, 121], 7);
     L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: '© OpenTopoMap' }).addTo(map);
     L.control.zoom({ position: 'topright' }).addTo(map);
@@ -153,7 +160,7 @@
           <td><input type="text" value="${p.time}" onchange="updatePoint(${idx}, 'time', this.value)"></td>
           <td><input type="number" step="any" value="${p.lat}" onchange="updatePoint(${idx}, 'lat', this.value)"></td>
           <td><input type="number" step="any" value="${p.lon}" onchange="updatePoint(${idx}, 'lon', this.value)"></td>
-          <td><input type="number" placeholder="°" value="${p.bearing}" onchange="updatePoint(${idx}, 'bearing', this.value)"></td>
+          <td><input type="number" value="${p.bearing}" onchange="updatePoint(${idx}, 'bearing', this.value)"></td>
           <td><input type="number" value="${p.gain || ''}" onchange="updatePoint(${idx}, 'gain', this.value)"></td>
           <td><input type="number" value="${p.strength || ''}" onchange="updatePoint(${idx}, 'strength', this.value)"></td>
           <td><button class="btn-active-status ${statusClass}" onclick="toggleStatus(${idx})">${p.isActive || '否'}</button></td>
@@ -191,16 +198,10 @@
         const now = new Date();
         const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')}`;
         const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-        
         recordedPoints.push({
-          date: dateStr,
-          time: timeStr,
-          lat: pos.coords.latitude.toFixed(5),
-          lon: pos.coords.longitude.toFixed(5),
-          bearing: '',
-          gain: '',
-          strength: '',
-          isActive: '否'
+          date: dateStr, time: timeStr,
+          lat: pos.coords.latitude.toFixed(5), lon: pos.coords.longitude.toFixed(5),
+          bearing: '', gain: '', strength: '', isActive: '否'
         });
         saveAndRender();
       }, () => alert('定位失敗'));
@@ -217,7 +218,7 @@
           const rad = (90 - brng) * Math.PI / 180;
           const endLat = lat + Math.sin(rad) * 0.15;
           const endLon = lon + Math.cos(rad) * 0.15;
-          L.polyline([[lat, lon], [endLat, endLon]], { color: color, weight: 2 }).addTo(map);
+          L.polyline([[lat, lon], [endLat, endLon]], { color: color, weight: 3 }).addTo(map);
           validLines.push({ x: lon, y: lat, dx: Math.cos(rad), dy: Math.sin(rad) });
         }
       });
@@ -240,39 +241,57 @@
         currentPrediction = { lat: avgLat, lon: avgLon };
         L.marker([avgLat, avgLon]).addTo(map).bindPopup("預估位置").openPopup();
         map.setView([avgLat, avgLon], 14);
-        document.getElementById('resultArea').innerHTML = `<div class="result-card"><strong>🎯 預測座標</strong><br>${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}</div>`;
+        document.getElementById('resultArea').innerHTML = `<div class="result-card"><strong>🎯 預測座標:</strong> ${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}</div>`;
       }
     }
 
-    async function shareLocation() {
+    // 分享報表邏輯
+    function handleShare() {
       if (recordedPoints.length === 0) return alert('無資料可分享');
       
       let text = `【野生動物追蹤觀測紀錄】\n`;
       recordedPoints.forEach((p, i) => {
-        text += `\n#${i+1} 紀錄時間: ${p.date} ${p.time}\n`;
-        text += `座標: ${p.lat}, ${p.lon}\n`;
-        text += `方位: ${p.bearing}° | Gain: ${p.gain||'-'} | 強度: ${p.strength||'-'}\n`;
-        text += `活動狀態: ${p.isActive}\n`;
+        text += `\n#${i+1} ${p.date} ${p.time}\n`;
+        text += `位置: ${p.lat}, ${p.lon}\n`;
+        text += `方位: ${p.bearing}° | G:${p.gain||'-'} | S:${p.strength||'-'} | 活動:${p.isActive}\n`;
         text += `-------------------`;
       });
 
       if (currentPrediction) {
-        text += `\n\n🎯 預測目標位置：\n${currentPrediction.lat.toFixed(5)}, ${currentPrediction.lon.toFixed(5)}\n`;
+        text += `\n\n🎯 預測目標：${currentPrediction.lat.toFixed(5)}, ${currentPrediction.lon.toFixed(5)}\n`;
         text += `Google Maps: https://www.google.com/maps?q=${currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}`;
       }
 
+      // 優先使用 Web Share API
       if (navigator.share) {
-        try {
-          await navigator.share({ title: '野生動物觀測紀錄', text: text });
-        } catch (err) { console.log('分享取消'); }
+        navigator.share({ title: '追蹤紀錄', text: text }).catch(err => {
+          // 如果使用者取消分享，不執行複製
+          console.log('Share dismissed');
+        });
       } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.select();
+        copyText(text);
+      }
+    }
+
+    function copyText(text) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
         document.execCommand('copy');
-        document.body.removeChild(textArea);
-        alert('紀錄已複製到剪貼簿，請貼上分享。');
+        alert('已將報表「複製」到剪貼簿，請直接在 LINE/簡訊貼上。');
+      } catch (err) {
+        alert('複製失敗，請手動截圖。');
+      }
+      document.body.removeChild(textArea);
+    }
+
+    function clearAllData() {
+      if (confirm('確定清除所有資料嗎？')) {
+        recordedPoints = [];
+        localStorage.removeItem('wildlife_points');
+        location.reload();
       }
     }
 
