@@ -3,44 +3,55 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Wildlife Triangulation Tool</title>
+  <title>Wildlife Triangulation Pro</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
       --primary: #2e7d32;
       --secondary: #1976d2;
       --danger: #d32f2f;
+      --share: #546e7a;
       --panel-bg: #ffffff;
     }
 
-    /* 基礎佈局優化 */
+    /* 核心佈局修正：放棄彈性高度，改用絕對填滿 */
     html, body { 
       margin: 0; padding: 0;
-      height: 100%; width: 100%;
-      font-family: -apple-system, system-ui, BlinkMacSystemFont, sans-serif;
+      width: 100vw; height: 100vh;
       overflow: hidden;
-      background: #000;
+      background-color: #f0f2f5;
+      font-family: -apple-system, sans-serif;
     }
 
-    #map { flex: 1; width: 100%; z-index: 1; }
+    /* 強制地圖佔據上半部 (45%) */
+    #map { 
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 45%; 
+      z-index: 10;
+      background: #ddd; /* 預留底色，若地圖沒載入也會有灰色 */
+    }
 
+    /* 面板佔據下半部 (55%) */
     .bottom-panel {
-      position: relative;
-      z-index: 500; /* 確保在 Leaflet 之下但 UI 之上 */
+      position: absolute;
+      bottom: 0; left: 0;
+      width: 100%;
+      height: 55%;
       background: var(--panel-bg);
-      border-radius: 20px 20px 0 0;
-      padding: 16px;
-      padding-bottom: calc(16px + env(safe-area-inset-bottom));
+      z-index: 1000;
       box-shadow: 0 -5px 15px rgba(0,0,0,0.2);
+      border-radius: 20px 20px 0 0;
       display: flex;
       flex-direction: column;
-      max-height: 60vh;
+      box-sizing: border-box;
+      padding: 16px;
+      /* 針對 iPhone 安全區域修正 */
+      padding-bottom: env(safe-area-inset-bottom, 16px);
     }
 
-    /* 強制按鈕容器顯示 */
     .sticky-controls {
-      display: block !important;
-      visibility: visible !important;
       flex-shrink: 0;
       margin-bottom: 12px;
     }
@@ -52,35 +63,37 @@
     }
 
     button {
-      border: none; padding: 15px 5px; border-radius: 12px;
+      border: none; padding: 14px 5px; border-radius: 12px;
       font-size: 1rem; font-weight: bold; color: white;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
-      -webkit-appearance: none; /* 防止 iOS 預設樣式干擾 */
     }
 
     .btn-record { background: var(--primary); }
     .btn-calc { background: var(--secondary); }
-    .btn-share { background: #546e7a; opacity: 1 !important; visibility: visible !important; }
-    .btn-clear { background: #78909c; }
+    .btn-share { background: var(--share); }
+    .btn-clear { background: #9e9e9e; }
 
     .table-scroll {
-      width: 100%; overflow-x: auto; overflow-y: auto;
-      border: 1px solid #ddd; border-radius: 8px;
-      flex: 1;
+      width: 100%; 
+      overflow-x: auto; 
+      overflow-y: auto;
+      border: 1px solid #ddd; 
+      border-radius: 12px;
+      flex-grow: 1; /* 讓表格吃掉剩餘空間 */
+      background: white;
     }
 
     .input-table { width: 100%; min-width: 800px; border-collapse: collapse; font-size: 0.85rem; }
-    .input-table th { background: #f5f5f5; padding: 12px; position: sticky; top: 0; z-index: 10; }
+    .input-table th { background: #f8f9fa; padding: 12px; position: sticky; top: 0; z-index: 20; border-bottom: 2px solid #eee; }
     .input-table td { padding: 8px 4px; border-bottom: 1px solid #eee; text-align: center; }
-    .input-table input { width: 90%; border: 1px solid #ddd; padding: 8px 2px; border-radius: 4px; }
+    .input-table input { width: 90%; border: 1px solid #eee; padding: 8px 2px; border-radius: 4px; text-align: center; font-size: 0.85rem; }
 
-    /* 活動按鈕 */
-    .btn-status { padding: 6px 8px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; border: none; width: 50px; }
+    .btn-status { padding: 6px 8px; border-radius: 6px; font-weight: bold; border: none; width: 50px; }
     .status-yes { background: #4caf50 !important; color: white; }
     .status-no { background: #f44336 !important; color: white; }
 
-    .result-card { background: #e3f2fd; padding: 12px; border-radius: 8px; margin-top: 10px; border-left: 5px solid var(--secondary); }
-    .hint { font-size: 0.75rem; color: #666; margin-top: 8px; text-align: center; }
+    .result-card { background: #e3f2fd; padding: 12px; border-radius: 10px; margin-top: 10px; border-left: 5px solid var(--secondary); flex-shrink: 0; }
+    .hint { font-size: 0.75rem; color: #888; margin-top: 8px; text-align: center; }
   </style>
 </head>
 <body>
@@ -92,7 +105,7 @@
       <div class="action-grid">
         <button class="btn-record" onclick="recordPoint()">📍 自動定位</button>
         <button class="btn-calc" onclick="processInput()">📐 交點計算</button>
-        <button id="share-report-btn" class="btn-share" onclick="handleShareClick(event)">📤 分享報表</button>
+        <button class="btn-share" onclick="handleShareClick()">📤 分享報表</button>
         <button class="btn-clear" onclick="clearAllData()">🗑️ 清除所有</button>
       </div>
       <p class="hint">⬅️ 左右滑動表格修改數據 ➡️</p>
@@ -116,52 +129,53 @@
         <tbody id="inputTableBody"></tbody>
       </table>
     </div>
+    
     <div id="resultArea"></div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // 1. 基本設定
+    // 解決 PWA 模式下地圖載入不全的問題
     const map = L.map('map', { zoomControl: false }).setView([23.5, 121], 7);
     L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png').addTo(map);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // 強制在載入後刷新地圖尺寸
+    setTimeout(() => { map.invalidateSize(); }, 500);
 
     let recordedPoints = JSON.parse(localStorage.getItem('wildlife_points') || '[]');
     let currentPrediction = null;
 
-    // 2. 表格渲染 (加入防錯機制)
     function renderInputTable() {
-      try {
-        const tbody = document.getElementById('inputTableBody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        recordedPoints.forEach((p, idx) => {
-          const row = document.createElement('tr');
-          const statusClass = p.isActive === '是' ? 'status-yes' : 'status-no';
-          row.innerHTML = `
-            <td><input type="text" value="${p.date}" onchange="updatePoint(${idx}, 'date', this.value)"></td>
-            <td><input type="text" value="${p.time}" onchange="updatePoint(${idx}, 'time', this.value)"></td>
-            <td><input type="number" step="any" value="${p.lat}" onchange="updatePoint(${idx}, 'lat', this.value)"></td>
-            <td><input type="number" step="any" value="${p.lon}" onchange="updatePoint(${idx}, 'lon', this.value)"></td>
-            <td><input type="number" value="${p.bearing}" onchange="updatePoint(${idx}, 'bearing', this.value)"></td>
-            <td><input type="number" value="${p.gain || ''}" onchange="updatePoint(${idx}, 'gain', this.value)"></td>
-            <td><input type="number" value="${p.strength || ''}" onchange="updatePoint(${idx}, 'strength', this.value)"></td>
-            <td><button class="btn-status ${statusClass}" onclick="toggleStatus(${idx})">${p.isActive || '否'}</button></td>
-            <td><button style="background:none; color:red; font-size:1.5rem; border:none;" onclick="deletePoint(${idx})">×</button></td>
-          `;
-          tbody.appendChild(row);
-        });
-      } catch (e) { console.error("渲染表格出錯:", e); }
-    }
-
-    // 3. 資料操作
-    function updatePoint(idx, key, val) {
-      recordedPoints[idx][key] = val;
-      localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
+      const tbody = document.getElementById('inputTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      recordedPoints.forEach((p, idx) => {
+        const row = document.createElement('tr');
+        const statusClass = p.isActive === '是' ? 'status-yes' : 'status-no';
+        row.innerHTML = `
+          <td><input type="text" value="${p.date}" onchange="updatePoint(${idx}, 'date', this.value)"></td>
+          <td><input type="text" value="${p.time}" onchange="updatePoint(${idx}, 'time', this.value)"></td>
+          <td><input type="number" step="any" value="${p.lat}" onchange="updatePoint(${idx}, 'lat', this.value)"></td>
+          <td><input type="number" step="any" value="${p.lon}" onchange="updatePoint(${idx}, 'lon', this.value)"></td>
+          <td><input type="number" value="${p.bearing}" onchange="updatePoint(${idx}, 'bearing', this.value)"></td>
+          <td><input type="number" value="${p.gain || ''}" onchange="updatePoint(${idx}, 'gain', this.value)"></td>
+          <td><input type="number" value="${p.strength || ''}" onchange="updatePoint(${idx}, 'strength', this.value)"></td>
+          <td><button class="btn-status ${statusClass}" onclick="toggleStatus(${idx})">${p.isActive || '否'}</button></td>
+          <td><button style="background:none; color:red; font-size:1.5rem; border:none;" onclick="deletePoint(${idx})">×</button></td>
+        `;
+        tbody.appendChild(row);
+      });
     }
 
     function toggleStatus(idx) {
       recordedPoints[idx].isActive = recordedPoints[idx].isActive === '是' ? '否' : '是';
       saveAndRender();
+    }
+
+    function updatePoint(idx, key, val) {
+      recordedPoints[idx][key] = val;
+      localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
     }
 
     function deletePoint(idx) {
@@ -191,7 +205,6 @@
       }, () => alert('定位失敗'));
     }
 
-    // 4. 計算與地圖邏輯
     function processInput() {
       map.eachLayer(l => { if(l instanceof L.Marker || l instanceof L.Polyline) map.removeLayer(l); });
       const validLines = [];
@@ -230,44 +243,31 @@
       }
     }
 
-    // 5. 分享邏輯 (加強 PWA 穩定性)
-    function handleShareClick(e) {
-      if (e) e.preventDefault();
+    function handleShareClick() {
       if (recordedPoints.length === 0) return alert('無資料可分享');
-      
       let text = `【野生動物追蹤報告】\n`;
       recordedPoints.forEach((p, i) => {
         text += `\n#${i+1} ${p.date} ${p.time}\n方位: ${p.bearing}° | G:${p.gain||'-'} | S:${p.strength||'-'} | 活動:${p.isActive}\n-------------------`;
       });
       if (currentPrediction) {
-        text += `\n\n🎯 預測位置：${currentPrediction.lat.toFixed(5)}, ${currentPrediction.lon.toFixed(5)}\nGoogle Maps: https://www.google.com/maps?q=${currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}`;
+        text += `\n\n🎯 預測位置：${currentPrediction.lat.toFixed(5)}, ${currentPrediction.lon.toFixed(5)}\nGoogle Maps: http://googleusercontent.com/maps.google.com/5{currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}`;
       }
 
-      // 如果支援 Web Share 且環境正確
       if (navigator.share) {
-        navigator.share({ title: '追蹤紀錄', text: text })
-          .then(() => console.log('分享成功'))
-          .catch((err) => {
-            console.log('分享失敗或取消:', err);
-            copyTextToClipboard(text);
-          });
+        navigator.share({ title: '追蹤紀錄', text: text }).catch(() => copyToClipboard(text));
       } else {
-        copyTextToClipboard(text);
+        copyToClipboard(text);
       }
     }
 
-    function copyTextToClipboard(text) {
+    function copyToClipboard(text) {
       const textArea = document.createElement("textarea");
       textArea.value = text;
       document.body.appendChild(textArea);
       textArea.select();
-      try {
-        document.execCommand('copy');
-        alert('此環境不支援直接分享，已將報表自動複製到剪貼簿！');
-      } catch (err) {
-        alert('請手動截圖分享紀錄。');
-      }
+      document.execCommand('copy');
       document.body.removeChild(textArea);
+      alert('已自動複製報表到剪貼簿，請貼上分享。');
     }
 
     function clearAllData() {
