@@ -382,19 +382,23 @@
     }
 
     function shareLocation() {
-      if (!recordedPoints.length) { alert('沒有觀測資料可分享'); return; }
+      if (!recordedPoints.length) { 
+        alert('沒有觀測資料可分享'); 
+        return; 
+      }
       
-      let text = '【野生動物追蹤觀測紀錄】\n\n';
+      let text = '【野生動物三角定位觀測紀錄】\n';
+      text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度,活動）：\n';
+      
+      // 逐筆輸出為 CSV 逗號分隔格式
       recordedPoints.forEach((p, i) => {
-        text += `[紀錄 ${i+1}] ${p.date || ''} ${p.time || ''}\n`;
-        text += `座標: ${p.lat}, ${p.lon}\n`;
-        text += `方位: ${p.bearing}° | Gain: ${p.gain || '-'} | 強度: ${p.strength || '-'}\n`;
-        text += `活動中: ${p.isActive}\n--------------------\n`;
+        text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''},${p.isActive || '否'}\n`;
       });
       
       if (currentPrediction) {
-        text += `\n🎯 預測目標位置：\n${currentPrediction.lat.toFixed(5)}, ${currentPrediction.lon.toFixed(5)}\n`;
-        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
+        text += `\n預測位置：\n`;
+        text += `緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
+        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}\n`;
       }
 
       if (navigator.share) {
@@ -403,7 +407,18 @@
           text: text
         }).catch(err => console.log('分享取消或失敗', err));
       } else {
-        prompt('請手動複製以下資訊分享：', text);
+        // 如果瀏覽器不支援分享，改為複製到剪貼簿並提示
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          alert('已將報表「自動複製」到剪貼簿，請直接開啟 LINE 等通訊軟體貼上。');
+        } catch (err) {
+          prompt('請手動複製以下資訊分享：', text);
+        }
+        document.body.removeChild(textArea);
       }
     }
 
