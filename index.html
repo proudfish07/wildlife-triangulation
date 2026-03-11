@@ -136,7 +136,6 @@
       if (data) {
         try { recordedPoints = JSON.parse(data); } catch (e) { recordedPoints = []; }
       }
-      // 確保舊資料也有 isActive 屬性
       recordedPoints.forEach(p => { if(!p.isActive) p.isActive = '否'; });
       renderInputTable();
     }
@@ -173,13 +172,13 @@
           input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
           if (key === 'lat' || key === 'lon') input.step = 'any';
           
-          // 🛑 載入時檢查方位角狀態 (空值或超出範圍都顯示紅框)
+          // 方位角防呆與紅框
           if (key === 'bearing') {
             input.placeholder = '0-360';
             let val = parseFloat(p[key]);
             if (p[key] === '' || p[key] === undefined || isNaN(val) || val < 0 || val > 360) {
               input.style.border = '2px solid #f44336';
-              input.style.backgroundColor = '#ffebee'; // 加上淡淡的紅色背景更明顯
+              input.style.backgroundColor = '#ffebee';
             } else {
               input.style.border = '1px solid #ccc';
               input.style.backgroundColor = 'white';
@@ -192,7 +191,6 @@
             recordedPoints[idx][key] = input.value;
             savePointsToStorage();
             
-            // 🛑 輸入時即時檢查，但不擅自改數字
             if (key === 'bearing') {
               let val = parseFloat(input.value);
               if (input.value === '' || isNaN(val) || val < 0 || val > 360) {
@@ -307,7 +305,6 @@
       let hasError = false;
       let errorMessage = '⚠️ 交點計算失敗！請檢查以下錯誤：\n\n';
 
-      // 🛑 逐筆檢查，並把錯誤訊息收集起來
       for (let i = 0; i < recordedPoints.length; i++) {
         let valStr = recordedPoints[i].bearing;
         let b = parseFloat(valStr);
@@ -321,18 +318,69 @@
         }
       }
 
-      // 如果有錯，阻斷計算並跳出警告清單
       if (hasError) {
         alert(errorMessage);
-        renderInputTable(); // 確保紅框有正確顯示
+        renderInputTable(); 
         return;
       }
 
-      // 檢查通過，執行計算
       displayPointsAndCalculate(recordedPoints);
     }
 
-    // 依照你的原版分享邏輯，加入新欄位
+    // 🌟 升級版自動定位 (含狀態提示與精準報錯)
+    function recordPoint() {
+      if (!navigator.geolocation) { 
+        alert('你的裝置或瀏覽器不支援定位功能'); 
+        return; 
+      }
+
+      const btn = document.querySelector('.btn-record');
+      const originalText = btn.textContent;
+      btn.textContent = '⏳ 定位中...';
+      btn.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          btn.textContent = originalText;
+          btn.disabled = false;
+
+          const now = new Date();
+          const pad = n => n < 10 ? '0' + n : n;
+          const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+          const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+          
+          recordedPoints.push({
+            date: dateStr, time: timeStr,
+            lat: pos.coords.latitude.toFixed(5), lon: pos.coords.longitude.toFixed(5),
+            bearing: '', gain: '', strength: '', isActive: '否'
+          });
+          
+          savePointsToStorage();
+          renderInputTable();
+          showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
+        },
+        err => {
+          btn.textContent = originalText;
+          btn.disabled = false;
+          
+          let errorMsg = '無法取得定位。';
+          if (err.code === 1) {
+            errorMsg = '⚠️ 定位權限被拒絕！\n請至手機設定開啟定位服務，並允許此網站存取位置。';
+          } else if (err.code === 2) {
+            errorMsg = '⚠️ 無法取得 GPS 訊號！請走到收訊良好的戶外再試一次。';
+          } else if (err.code === 3) {
+            errorMsg = '⚠️ 定位逾時 (超過 10 秒)！訊號可能不佳，請重試。';
+          }
+          alert(errorMsg);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000, 
+          maximumAge: 0
+        }
+      );
+    }
+
     function shareLocation() {
       if (!recordedPoints.length) { alert('沒有觀測資料可分享'); return; }
       
@@ -349,7 +397,6 @@
         text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat},${currentPrediction.lon}\n`;
       }
 
-      // 保留你原本穩定的分享判斷寫法
       if (navigator.share) {
         navigator.share({
           title: '野生動物觀測紀錄',
