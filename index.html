@@ -167,22 +167,47 @@
       recordedPoints.forEach((p, idx) => {
         const row = document.createElement('tr');
         
-        // 文字輸入欄位
         ['date','time','lat','lon','bearing','gain','strength'].forEach(key => {
           const td = document.createElement('td');
           const input = document.createElement('input');
           input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
           if (key === 'lat' || key === 'lon') input.step = 'any';
+          
+          // 🛑 載入時檢查方位角狀態 (空值或超出範圍都顯示紅框)
+          if (key === 'bearing') {
+            input.placeholder = '0-360';
+            let val = parseFloat(p[key]);
+            if (p[key] === '' || p[key] === undefined || isNaN(val) || val < 0 || val > 360) {
+              input.style.border = '2px solid #f44336';
+              input.style.backgroundColor = '#ffebee'; // 加上淡淡的紅色背景更明顯
+            } else {
+              input.style.border = '1px solid #ccc';
+              input.style.backgroundColor = 'white';
+            }
+          }
+
           input.value = (p[key]!==null && p[key]!==undefined) ? p[key] : '';
+          
           input.oninput = () => {
             recordedPoints[idx][key] = input.value;
             savePointsToStorage();
+            
+            // 🛑 輸入時即時檢查，但不擅自改數字
+            if (key === 'bearing') {
+              let val = parseFloat(input.value);
+              if (input.value === '' || isNaN(val) || val < 0 || val > 360) {
+                input.style.border = '2px solid #f44336';
+                input.style.backgroundColor = '#ffebee';
+              } else {
+                input.style.border = '1px solid #ccc';
+                input.style.backgroundColor = 'white';
+              }
+            }
           };
           td.appendChild(input);
           row.appendChild(td);
         });
 
-        // 活動按鈕欄位
         const tdActive = document.createElement('td');
         const btnActive = document.createElement('button');
         btnActive.className = 'btn-status ' + (p.isActive === '是' ? 'status-yes' : 'status-no');
@@ -191,7 +216,6 @@
         tdActive.appendChild(btnActive);
         row.appendChild(tdActive);
 
-        // 刪除按鈕
         const tdDel = document.createElement('td');
         tdDel.className = 'op-btn';
         const btnDel = document.createElement('button');
@@ -275,26 +299,37 @@
     }
 
     function processInput() {
-      // 在這個版本中，只要輸入就會自動存檔，直接讀取 array 即可
-      displayPointsAndCalculate(recordedPoints);
-    }
+      if (recordedPoints.length === 0) {
+        alert('目前沒有任何觀測資料。');
+        return;
+      }
 
-    function recordPoint() {
-      if (!navigator.geolocation) { alert('裝置不支援定位'); return; }
-      navigator.geolocation.getCurrentPosition(pos => {
-        const now = new Date();
-        const pad = n => n < 10 ? '0' + n : n;
-        const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
-        const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        recordedPoints.push({
-          date: dateStr, time: timeStr,
-          lat: pos.coords.latitude.toFixed(5), lon: pos.coords.longitude.toFixed(5),
-          bearing: '', gain: '', strength: '', isActive: '否'
-        });
-        savePointsToStorage();
-        renderInputTable();
-        showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
-      }, () => alert('無法取得定位資訊'));
+      let hasError = false;
+      let errorMessage = '⚠️ 交點計算失敗！請檢查以下錯誤：\n\n';
+
+      // 🛑 逐筆檢查，並把錯誤訊息收集起來
+      for (let i = 0; i < recordedPoints.length; i++) {
+        let valStr = recordedPoints[i].bearing;
+        let b = parseFloat(valStr);
+        
+        if (valStr === '' || valStr === undefined) {
+          hasError = true;
+          errorMessage += `• 第 ${i + 1} 筆觀測：未填寫方位角\n`;
+        } else if (isNaN(b) || b < 0 || b > 360) {
+          hasError = true;
+          errorMessage += `• 第 ${i + 1} 筆觀測：方位角 (${valStr}) 無效，必須在 0~360 之間\n`;
+        }
+      }
+
+      // 如果有錯，阻斷計算並跳出警告清單
+      if (hasError) {
+        alert(errorMessage);
+        renderInputTable(); // 確保紅框有正確顯示
+        return;
+      }
+
+      // 檢查通過，執行計算
+      displayPointsAndCalculate(recordedPoints);
     }
 
     // 依照你的原版分享邏輯，加入新欄位
