@@ -62,8 +62,6 @@
       border: 1px solid #ccc;
       border-radius: 4px;
       text-align: center;
-      /* 加入這行，防止手機自動縮放 */
-      font-size: 16px; 
     }
     
     /* 活動狀態按鈕 */
@@ -102,6 +100,12 @@
     
     <div class="example-block">
       💡 提示：左右滑動下方表格以填寫「方位角、Gain、強度、活動」
+    </div>
+
+    <div style="margin-bottom: 10px; font-size: 0.9rem; background: #fffde7; padding: 8px; border-radius: 8px; border: 1px solid #fbc02d;">
+      偏角修正 (磁北轉真北): 
+      <input type="number" id="declination" value="-3.5" style="width: 50px; text-align: center;"> ° 
+      <small>(定位時會自動切換：花蓮約 -3.5° / 台東約 -3.0°)</small>
     </div>
     
     <table class="input-table" id="inputTable">
@@ -177,35 +181,44 @@
           
           // 方位角防呆與紅框
           if (key === 'bearing') {
-            input.placeholder = '0-360';
-            let val = parseFloat(p[key]);
-            if (p[key] === '' || p[key] === undefined || isNaN(val) || val < 0 || val > 360) {
-              input.style.border = '2px solid #f44336';
-              input.style.backgroundColor = '#ffebee';
-            } else {
-              input.style.border = '1px solid #ccc';
-              input.style.backgroundColor = 'white';
-            }
-          }
-
-          input.value = (p[key]!==null && p[key]!==undefined) ? p[key] : '';
+            const container = document.createElement('div');
+            container.style.display = 'flex';
+            container.style.gap = '2px';
+            container.style.alignItems = 'center';
           
-          input.oninput = () => {
-            recordedPoints[idx][key] = input.value;
-            savePointsToStorage();
-            
-            if (key === 'bearing') {
-              let val = parseFloat(input.value);
-              if (input.value === '' || isNaN(val) || val < 0 || val > 360) {
-                input.style.border = '2px solid #f44336';
-                input.style.backgroundColor = '#ffebee';
-              } else {
+            input.style.flex = '1'; // 讓輸入框自動填滿剩餘空間
+          
+            const compassBtn = document.createElement('button');
+            compassBtn.textContent = '🧭';
+            compassBtn.style.padding = '4px';
+            compassBtn.style.margin = '0';
+            compassBtn.style.fontSize = '1.2rem';
+            compassBtn.style.backgroundColor = '#673ab7'; // 紫色區分功能
+            compassBtn.style.border = 'none';
+            compassBtn.style.borderRadius = '4px';
+            compassBtn.style.color = 'white';
+          
+            compassBtn.onclick = () => {
+              // 呼叫上一則回覆建議新增的 getDeviceHeading 函式
+              getDeviceHeading((val) => {
+                input.value = val;
+                recordedPoints[idx][key] = val;
+                savePointsToStorage();
+                
+                // 更新樣式（避免紅框）
                 input.style.border = '1px solid #ccc';
                 input.style.backgroundColor = 'white';
-              }
-            }
-          };
-          td.appendChild(input);
+              });
+            };
+          
+            container.appendChild(input);
+            container.appendChild(compassBtn);
+            td.appendChild(container); // 將容器放入儲存格
+          } else {
+            td.appendChild(input); // 其他欄位保持原樣
+          }
+          // --- 修改結束 ---
+          
           row.appendChild(td);
         });
 
@@ -234,6 +247,37 @@
     }
 
     function bearingToRadians(b) { return b * Math.PI / 180; }
+    // 取得手機方位角（已整合磁偏角）
+    function getDeviceHeading(callback) {
+      const declination = parseFloat(document.getElementById('declination').value) || 0;
+    
+      // 處理 iOS 權限要求
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(response => {
+            if (response === 'granted') {
+              window.addEventListener('deviceorientation', (e) => {
+                // iOS 使用 webkitCompassHeading (磁北)
+                let heading = e.webkitCompassHeading;
+                if (heading !== undefined) {
+                  let trueHeading = (heading + declination + 360) % 360;
+                  callback(trueHeading.toFixed(1));
+                }
+              }, { once: true });
+            } else {
+              alert('請允許存取動作與方向感測器以使用指南針。');
+            }
+          })
+          .catch(err => alert('iOS 授權失敗: ' + err));
+      } else {
+        // Android 或其他瀏覽器
+        window.addEventListener('deviceorientationabsolute', (e) => {
+          let heading = 360 - e.alpha; // Android 的 alpha 是逆時針
+          let trueHeading = (heading + declination + 360) % 360;
+          callback(trueHeading.toFixed(1));
+        }, { once: true });
+      }
+    }
     
     function lineFromPointBearing(lat, lon, bearing) {
       const angle = bearingToRadians(bearing);
@@ -330,7 +374,7 @@
       displayPointsAndCalculate(recordedPoints);
     }
 
-    // 🌟 升級版自動定位 (含狀態提示與精準報錯)
+    // 🌟 升級版自動定位 (含自動磁偏角判定)
     function recordPoint() {
       if (!navigator.geolocation) { 
         alert('你的裝置或瀏覽器不支援定位功能'); 
@@ -347,6 +391,21 @@
           btn.textContent = originalText;
           btn.disabled = false;
 
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+
+          // --- 🔧 自動磁偏角校正邏輯 ---
+          // 以緯度 23.3 度 (玉里附近) 作為分界
+          let autoDecl = -3.5; 
+          if (lat < 23.3) {
+            autoDecl = -3.0; // 緯度低於 23.3 判定為台東區域
+          }
+          const declInput = document.getElementById('declination');
+          if (declInput) {
+            declInput.value = autoDecl;
+          }
+          // ----------------------------
+
           const now = new Date();
           const pad = n => n < 10 ? '0' + n : n;
           const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
@@ -354,13 +413,13 @@
           
           recordedPoints.push({
             date: dateStr, time: timeStr,
-            lat: pos.coords.latitude.toFixed(5), lon: pos.coords.longitude.toFixed(5),
+            lat: lat.toFixed(5), lon: lon.toFixed(5),
             bearing: '', gain: '', strength: '', isActive: '否'
           });
           
           savePointsToStorage();
           renderInputTable();
-          showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
+          showCurrentLocationOnMap(lat, lon);
         },
         err => {
           btn.textContent = originalText;
