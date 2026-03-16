@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Wildlife Triangulation Tool</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -53,7 +53,7 @@
     .input-table th { background-color: #f0f0f0; color: #333; padding: 0.6rem; border: 1px solid #ccc; text-align: center; }
     .input-table td { padding: 0.4rem; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle; }
     
-    /* 欄位寬度微調 */
+    /* 修改原本的 .input-table input 部分 */
     .input-table input {
       min-width: 4em;
       width: 100%;
@@ -62,6 +62,8 @@
       border: 1px solid #ccc;
       border-radius: 4px;
       text-align: center;
+      /* 加入這行，防止手機自動縮放 */
+      font-size: 16px; 
     }
     
     /* 活動狀態按鈕 */
@@ -170,6 +172,7 @@
           const td = document.createElement('td');
           const input = document.createElement('input');
           input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
+          input.inputMode = 'decimal';
           if (key === 'lat' || key === 'lon') input.step = 'any';
           
           // 方位角防呆與紅框
