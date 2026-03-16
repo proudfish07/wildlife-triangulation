@@ -177,14 +177,17 @@
       recordedPoints.forEach((p, idx) => {
         const row = document.createElement('tr');
         
-        // 3. 在陣列最前面加入 'id'
+        // 確保第一個欄位是 'id'
         ['id','date','time','lat','lon','bearing','gain','strength'].forEach(key => {
           const td = document.createElement('td');
           const input = document.createElement('input');
-          // 設定 id 為 text 類型
+          
+          // 設定輸入框類型
           input.type = (key === 'id' || key === 'date' || key === 'time') ? 'text' : 'number';
-          input.inputMode = 'decimal';
-          if (key === 'lat' || key === 'lon') input.step = 'any';
+          
+          // 重要：將陣列中的值填入 input.value
+          input.value = (p[key] !== null && p[key] !== undefined) ? p[key] : '';
+        
           
           // 方位角防呆與紅框
           if (key === 'bearing') {
@@ -381,7 +384,7 @@
       displayPointsAndCalculate(recordedPoints);
     }
 
-    // 🌟 升級版自動定位 (含自動磁偏角判定)
+    // 🌟 修正後的自動定位：確保日期、時間、座標全部自動填入
     function recordPoint() {
       if (!navigator.geolocation) { 
         alert('你的裝置或瀏覽器不支援定位功能'); 
@@ -398,29 +401,33 @@
           btn.textContent = originalText;
           btn.disabled = false;
     
-          // 取得目前的日期與時間
+          // 1. 自動取得目前的日期與時間
           const now = new Date();
           const pad = n => n < 10 ? '0' + n : n;
           const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
           const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
           
-          // 取得經緯度
-          const lat = pos.coords.latitude.toFixed(5);
-          const lon = pos.coords.longitude.toFixed(5);
+          // 2. 自動取得高精度的經緯度
+          const currentLat = pos.coords.latitude.toFixed(5);
+          const currentLon = pos.coords.longitude.toFixed(5);
           
-          // 取得上方大欄位的個體編號
+          // 3. 取得上方大欄位的個體編號
           const subjectId = document.getElementById('currentSubjectId').value;
     
-          // 將所有資訊自動填入紀錄
+          // 4. 將所有資訊正確推入紀錄陣列
           recordedPoints.push({
             id: subjectId,
             date: dateStr, 
             time: timeStr,
-            lat: lat, 
-            lon: lon,
-            bearing: '', gain: '', strength: '', isActive: '否'
+            lat: currentLat, 
+            lon: currentLon,
+            bearing: '', 
+            gain: '', 
+            strength: '', 
+            isActive: '否'
           });
           
+          // 儲存並重新渲染表格，這會讓數值出現在畫面上
           savePointsToStorage();
           renderInputTable();
           showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
