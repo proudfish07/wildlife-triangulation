@@ -116,7 +116,7 @@
     <table class="input-table" id="inputTable">
       <thead>
         <tr>
-          <th>日期</th><th>時間</th><th>緯度</th><th>經度</th>
+          <th>個體編號</th><th>日期</th><th>時間</th><th>緯度</th><th>經度</th>
           <th>方位角</th><th>Gain</th><th>強度</th><th>活動</th><th>操作</th>
         </tr>
       </thead>
@@ -177,61 +177,54 @@
       recordedPoints.forEach((p, idx) => {
         const row = document.createElement('tr');
         
-        // 確保第一個欄位是 'id'
-        ['id','date','time','lat','lon','bearing','gain','strength'].forEach(key => {
+        // 嚴格對照標題順序：編號 -> 日期 -> 時間 -> 緯度 -> 經度 -> 方位角 -> Gain -> 強度
+        ['id', 'date', 'time', 'lat', 'lon', 'bearing', 'gain', 'strength'].forEach(key => {
           const td = document.createElement('td');
           const input = document.createElement('input');
           
-          // 設定輸入框類型
+          // 設定屬性
           input.type = (key === 'id' || key === 'date' || key === 'time') ? 'text' : 'number';
-          
-          // 重要：將陣列中的值填入 input.value
           input.value = (p[key] !== null && p[key] !== undefined) ? p[key] : '';
-        
           
-          // 方位角防呆與紅框
+          // 更新資料邏輯
+          input.oninput = () => {
+            recordedPoints[idx][key] = input.value;
+            savePointsToStorage();
+          };
+    
+          // 處理方位角 Compass 按鈕
           if (key === 'bearing') {
             const container = document.createElement('div');
             container.style.display = 'flex';
             container.style.gap = '2px';
             container.style.alignItems = 'center';
-          
-            input.style.flex = '1'; // 讓輸入框自動填滿剩餘空間
-          
+            input.style.flex = '1';
+            
             const compassBtn = document.createElement('button');
             compassBtn.textContent = '🧭';
             compassBtn.style.padding = '4px';
             compassBtn.style.margin = '0';
-            compassBtn.style.fontSize = '1.2rem';
-            compassBtn.style.backgroundColor = '#673ab7'; // 紫色區分功能
+            compassBtn.style.backgroundColor = '#673ab7';
             compassBtn.style.border = 'none';
             compassBtn.style.borderRadius = '4px';
             compassBtn.style.color = 'white';
-          
             compassBtn.onclick = () => {
-              // 呼叫上一則回覆建議新增的 getDeviceHeading 函式
               getDeviceHeading((val) => {
                 input.value = val;
                 recordedPoints[idx][key] = val;
                 savePointsToStorage();
-                
-                // 更新樣式（避免紅框）
-                input.style.border = '1px solid #ccc';
-                input.style.backgroundColor = 'white';
               });
             };
-          
             container.appendChild(input);
             container.appendChild(compassBtn);
-            td.appendChild(container); // 將容器放入儲存格
+            td.appendChild(container);
           } else {
-            td.appendChild(input); // 其他欄位保持原樣
+            td.appendChild(input);
           }
-          // --- 修改結束 ---
-          
           row.appendChild(td);
         });
-
+    
+        // 活動狀態按鈕
         const tdActive = document.createElement('td');
         const btnActive = document.createElement('button');
         btnActive.className = 'btn-status ' + (p.isActive === '是' ? 'status-yes' : 'status-no');
@@ -239,7 +232,8 @@
         btnActive.onclick = () => toggleStatus(idx);
         tdActive.appendChild(btnActive);
         row.appendChild(tdActive);
-
+    
+        // 刪除按鈕
         const tdDel = document.createElement('td');
         tdDel.className = 'op-btn';
         const btnDel = document.createElement('button');
