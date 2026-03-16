@@ -93,6 +93,18 @@
 
   <div class="input-panel">
     <h2>🐾 野生動物定位工具</h2>
+
+    <div style="background: #e8f5e9; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #c8e6c9;">
+      <div style="margin-bottom: 10px;">
+        <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🔍 目前追蹤個體編號</label>
+        <input type="text" id="currentSubjectId" style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box;" placeholder="例如：黑熊A01">
+      </div>
+      <div style="margin-bottom: 0;">
+        <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🧭 偏角修正 (磁北轉真北)</label>
+        <input type="number" id="declination" value="-4.5" style="width: 80px; padding: 8px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; text-align: center;"> 
+        <span style="font-size: 0.9rem; color: #666;">° (定位時自動校準)</span>
+      </div>
+    </div>
     <button class="btn-record" onclick="recordPoint()">📍 自動定位</button>
     <button class="btn-calc" onclick="processInput()">📐 交點計算</button>
     <button class="btn-export" onclick="shareLocation()">📤 分享報表</button>
@@ -100,12 +112,6 @@
     
     <div class="example-block">
       💡 提示：左右滑動下方表格以填寫「方位角、Gain、強度、活動」
-    </div>
-
-    <div style="margin-bottom: 10px; font-size: 0.9rem; background: #fffde7; padding: 8px; border-radius: 8px; border: 1px solid #fbc02d;">
-      偏角修正 (磁北轉真北): 
-      <input type="number" id="declination" value="-3.5" style="width: 50px; text-align: center;"> ° 
-      <small>(定位時會自動切換：花蓮約 -3.5° / 台東約 -3.0°)</small>
     </div>
     
     <table class="input-table" id="inputTable">
@@ -172,10 +178,12 @@
       recordedPoints.forEach((p, idx) => {
         const row = document.createElement('tr');
         
-        ['date','time','lat','lon','bearing','gain','strength'].forEach(key => {
+        // 3. 在陣列最前面加入 'id'
+        ['id','date','time','lat','lon','bearing','gain','strength'].forEach(key => {
           const td = document.createElement('td');
           const input = document.createElement('input');
-          input.type = (key === 'lat' || key === 'lon' || key === 'bearing' || key === 'gain' || key === 'strength') ? 'number' : 'text';
+          // 設定 id 為 text 類型
+          input.type = (key === 'id' || key === 'date' || key === 'time') ? 'text' : 'number';
           input.inputMode = 'decimal';
           if (key === 'lat' || key === 'lon') input.step = 'any';
           
@@ -390,28 +398,25 @@
         pos => {
           btn.textContent = originalText;
           btn.disabled = false;
-
+  
           const lat = pos.coords.latitude;
           const lon = pos.coords.longitude;
-
-          // --- 🔧 自動磁偏角校正邏輯 ---
-          // 以緯度 23.3 度 (玉里附近) 作為分界
+  
+          // --- 自動校正磁偏角邏輯 (保持原花東邏輯) ---
           let autoDecl = -3.5; 
-          if (lat < 23.3) {
-            autoDecl = -3.0; // 緯度低於 23.3 判定為台東區域
-          }
-          const declInput = document.getElementById('declination');
-          if (declInput) {
-            declInput.value = autoDecl;
-          }
-          // ----------------------------
-
+          if (lat < 23.3) autoDecl = -3.0;
+          document.getElementById('declination').value = autoDecl;
+  
           const now = new Date();
           const pad = n => n < 10 ? '0' + n : n;
           const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
           const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
           
+          // 2. 獲取上方大欄位的編號
+          const subjectId = document.getElementById('currentSubjectId').value;
+          
           recordedPoints.push({
+            id: subjectId, // 儲存個體編號
             date: dateStr, time: timeStr,
             lat: lat.toFixed(5), lon: lon.toFixed(5),
             bearing: '', gain: '', strength: '', isActive: '否'
@@ -449,11 +454,15 @@
         return; 
       }
       
-      let text = '【野生動物三角定位觀測紀錄】\n';
-      text += '觀測資料（日期,時間,緯度,經度,方位角,gain,強度,活動）：\n';
+      // 4. 取得大欄位的個體編號作為標題
+      const mainSubjectId = document.getElementById('currentSubjectId').value || '未命名';
+      let text = `【野生動物三角定位觀測紀錄】\n`;
+      text += `🐾 個體編號：${mainSubjectId}\n`; // 放在上一層
+      text += `--------------------------------\n`;
+      text += `觀測資料（日期,時間,緯度,經度,方位角,Gain,強度,活動）：\n`;
       
-      // 逐筆輸出為 CSV 逗號分隔格式
       recordedPoints.forEach((p, i) => {
+        // 資料格式內不再放編號
         text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''},${p.isActive || '否'}\n`;
       });
       
