@@ -93,16 +93,15 @@
 
   <div class="input-panel">
     <h2>🐾 野生動物定位工具</h2>
-
-    <div style="background: #e8f5e9; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #c8e6c9;">
-      <div style="margin-bottom: 10px;">
+    <div class="main-inputs" style="background: #e8f5e9; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #c8e6c9;">
+      <div class="field-group" style="margin-bottom: 10px;">
         <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🔍 目前追蹤個體編號</label>
         <input type="text" id="currentSubjectId" style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box;" placeholder="例如：黑熊A01">
       </div>
-      <div style="margin-bottom: 0;">
+      <div class="field-group" style="margin-bottom: 0;">
         <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🧭 偏角修正 (磁北轉真北)</label>
         <input type="number" id="declination" value="-4.5" style="width: 80px; padding: 8px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; text-align: center;"> 
-        <span style="font-size: 0.9rem; color: #666;">° (定位時自動校準)</span>
+        <span style="font-size: 0.9rem; color: #666;">° (預設為 -4.5，可手動修改)</span>
       </div>
     </div>
     <button class="btn-record" onclick="recordPoint()">📍 自動定位</button>
@@ -388,63 +387,46 @@
         alert('你的裝置或瀏覽器不支援定位功能'); 
         return; 
       }
-
+    
       const btn = document.querySelector('.btn-record');
       const originalText = btn.textContent;
       btn.textContent = '⏳ 定位中...';
       btn.disabled = true;
-
+    
       navigator.geolocation.getCurrentPosition(
         pos => {
           btn.textContent = originalText;
           btn.disabled = false;
-  
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-  
-          // --- 自動校正磁偏角邏輯 (保持原花東邏輯) ---
-          let autoDecl = -3.5; 
-          if (lat < 23.3) autoDecl = -3.0;
-          document.getElementById('declination').value = autoDecl;
-  
+    
           const now = new Date();
           const pad = n => n < 10 ? '0' + n : n;
           const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
           const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
           
-          // 2. 獲取上方大欄位的編號
+          const lat = pos.coords.latitude.toFixed(5);
+          const lon = pos.coords.longitude.toFixed(5);
           const subjectId = document.getElementById('currentSubjectId').value;
-          
+    
+          // 建立新紀錄，包含自動抓取的日期、時間、經緯度
           recordedPoints.push({
-            id: subjectId, // 儲存個體編號
-            date: dateStr, time: timeStr,
-            lat: lat.toFixed(5), lon: lon.toFixed(5),
+            id: subjectId,
+            date: dateStr, 
+            time: timeStr,
+            lat: lat, 
+            lon: lon,
             bearing: '', gain: '', strength: '', isActive: '否'
           });
           
           savePointsToStorage();
           renderInputTable();
-          showCurrentLocationOnMap(lat, lon);
+          showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
         },
         err => {
           btn.textContent = originalText;
           btn.disabled = false;
-          
-          let errorMsg = '無法取得定位。';
-          if (err.code === 1) {
-            errorMsg = '⚠️ 定位權限被拒絕！\n請至手機設定開啟定位服務，並允許此網站存取位置。';
-          } else if (err.code === 2) {
-            errorMsg = '⚠️ 無法取得 GPS 訊號！請走到收訊良好的戶外再試一次。';
-          } else if (err.code === 3) {
-            errorMsg = '⚠️ 定位逾時 (超過 10 秒)！訊號可能不佳，請重試。';
-          }
-          alert(errorMsg);
+          alert('定位失敗：' + err.message);
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000, 
-          maximumAge: 0
-        }
+        { enableHighAccuracy: true, timeout: 10000 }
       );
     }
 
@@ -454,42 +436,27 @@
         return; 
       }
       
-      // 4. 取得大欄位的個體編號作為標題
       const mainSubjectId = document.getElementById('currentSubjectId').value || '未命名';
       let text = `【野生動物三角定位觀測紀錄】\n`;
-      text += `🐾 個體編號：${mainSubjectId}\n`; // 放在上一層
+      text += `🐾 個體編號：${mainSubjectId}\n`;
       text += `--------------------------------\n`;
       text += `觀測資料（日期,時間,緯度,經度,方位角,Gain,強度,活動）：\n`;
       
       recordedPoints.forEach((p, i) => {
-        // 資料格式內不再放編號
-        text += `${i+1}. ${p.date || ''},${p.time || ''},${p.lat || ''},${p.lon || ''},${p.bearing || ''},${p.gain || ''},${p.strength || ''},${p.isActive || '否'}\n`;
+        // 輸出自動記錄的日期、時間與經緯度
+        text += `${i+1}. ${p.date},${p.time},${p.lat},${p.lon},${p.bearing || ''},${p.gain || ''},${p.strength || ''},${p.isActive || '否'}\n`;
       });
       
       if (currentPrediction) {
-        text += `\n預測位置：\n`;
-        text += `緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
-        text += `Google地圖：https://maps.google.com/?q=${currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}\n`;
+        text += `\n🎯 預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
+        text += `Google地圖：https://www.google.com/maps?q=${currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}\n`;
       }
-
+    
+      // 分享邏輯... (其餘不變)
       if (navigator.share) {
-        navigator.share({
-          title: '野生動物觀測紀錄',
-          text: text
-        }).catch(err => console.log('分享取消或失敗', err));
+        navigator.share({ title: '野生動物觀測紀錄', text: text });
       } else {
-        // 如果瀏覽器不支援分享，改為複製到剪貼簿並提示
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.select();
-        try {
-          document.execCommand('copy');
-          alert('已將報表「自動複製」到剪貼簿，請直接開啟 LINE 等通訊軟體貼上。');
-        } catch (err) {
-          prompt('請手動複製以下資訊分享：', text);
-        }
-        document.body.removeChild(textArea);
+        copyToClipboard(text);
       }
     }
 
