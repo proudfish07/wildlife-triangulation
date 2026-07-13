@@ -179,6 +179,7 @@
         localStorage.removeItem('wildlife_points');
         document.getElementById('sessionNote').value = '';
         localStorage.removeItem('wildlife_note');
+        localStorage.removeItem('wildlife_prediction');
         renderInputTable();
         document.getElementById('pointTable').innerHTML = '';
         map.eachLayer(layer => {
@@ -359,18 +360,18 @@
         const avgLat = intersections.reduce((sum, p) => sum + p[0], 0) / intersections.length;
         const avgLon = intersections.reduce((sum, p) => sum + p[1], 0) / intersections.length;
         currentPrediction = { lat: avgLat, lon: avgLon };
+        localStorage.setItem('wildlife_prediction', JSON.stringify(currentPrediction)); // 保存結果，重開網頁分享時仍帶得出來
         L.marker([avgLat, avgLon]).addTo(map)
           .bindPopup(`🎯 預測位置<br>${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}`).openPopup();
 
-        // 地圖縮放至同時涵蓋所有觀測點與預測位置
-        const boundsPoints = validLines.map(l => [l.lat, l.lon]);
-        boundsPoints.push([avgLat, avgLon]);
-        map.fitBounds(L.latLngBounds(boundsPoints), { padding: [40, 40], maxZoom: 15 });
+        // 地圖縮放以交會點為主：涵蓋所有射線交點（含預測位置）
+        map.fitBounds(L.latLngBounds(intersections), { padding: [40, 40], maxZoom: 15 });
 
         document.getElementById('pointTable').innerHTML =
           `🎯 交點平均預測位置：<br>緯度: ${avgLat.toFixed(5)} / 經度: ${avgLon.toFixed(5)}`;
       } else {
         currentPrediction = null;
+        localStorage.removeItem('wildlife_prediction');
         document.getElementById('pointTable').innerHTML = '';
       }
     }
@@ -495,11 +496,35 @@
       }
     }
 
-    function showCurrentLocationOnMap(lat=null, lon=null) {
+    // 無系統分享功能時（多為桌面瀏覽器）：複製到剪貼簿
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => alert('已複製觀測紀錄到剪貼簿，可直接貼上分享'))
+          .catch(() => legacyCopy(text));
+      } else {
+        legacyCopy(text);
+      }
+    }
+    function legacyCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        alert('已複製觀測紀錄到剪貼簿，可直接貼上分享');
+      } catch (e) {
+        alert('自動複製失敗，請手動複製以下內容：\n\n' + text);
+      }
+      document.body.removeChild(ta);
+    }
+
+    function showCurrentLocationOnMap(lat=null, lon=null, autoOpenPopup=true) {
       if (lat === null || lon === null) {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(pos => {
-            showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
+            showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude, autoOpenPopup);
           });
         }
         return;
@@ -508,6 +533,7 @@
       currentLocationCircle = L.circleMarker([lat, lon], {
         radius: 8, color: '#007bff', fillColor: '#339CFF', fillOpacity: 0.8
       }).addTo(map).bindPopup("你的位置");
+      if (autoOpenPopup) currentLocationCircle.openPopup(); // 維持原本自動彈出；即時定位連續更新時才不彈
     }
 
     // 📡 GPS 即時更新開關：開啟時用 watchPosition 持續更新藍點位置
@@ -521,7 +547,7 @@
         }
         liveWatchId = navigator.geolocation.watchPosition(
           pos => {
-            showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
+            showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude, false);
           },
           err => {
             alert('即時定位失敗：' + err.message);
@@ -545,6 +571,15 @@
     window.onload = function () {
       loadPointsFromStorage();
       loadMetaFromStorage();
+      // 還原上次的交點計算結果，重開網頁後分享仍會帶出預測位置與 Google 地圖連結
+      const savedPred = localStorage.getItem('wildlife_prediction');
+      if (savedPred) {
+        try { currentPrediction = JSON.parse(savedPred); } catch (e) { currentPrediction = null; }
+        if (currentPrediction) {
+          document.getElementById('pointTable').innerHTML =
+            `🎯 交點平均預測位置（上次計算結果）：<br>緯度: ${currentPrediction.lat.toFixed(5)} / 經度: ${currentPrediction.lon.toFixed(5)}`;
+        }
+      }
       showCurrentLocationOnMap();
     };
 
