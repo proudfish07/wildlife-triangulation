@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wildlife-triangulation-v1';
+const CACHE_NAME = 'wildlife-triangulation-v2';
 const urlsToCache = [
   './',
   './index.html',
@@ -9,6 +9,8 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', event => {
+  // 讓新版 service worker 不用等舊分頁全部關閉就能生效
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
@@ -29,6 +31,6 @@ self.addEventListener('activate', event => {
         keys.filter(key => key !== CACHE_NAME)
             .map(key => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim()) // 立即接管已開啟的頁面
   );
 });

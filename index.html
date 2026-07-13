@@ -34,6 +34,8 @@
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .btn-record { background-color: #2e7d32; }
+    .btn-live { background-color: #757575; }
+    .btn-live.live-on { background-color: #673ab7; }
     .btn-calc { background-color: #1976d2; }
     .btn-export { background-color: #546e7a; }
     .btn-clear { background-color: #d32f2f; }
@@ -98,13 +100,18 @@
         <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🔍 目前追蹤個體編號</label>
         <input type="text" id="currentSubjectId" style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box;" placeholder="例如：黑熊A01">
       </div>
-      <div class="field-group" style="margin-bottom: 0;">
+      <div class="field-group" style="margin-bottom: 10px;">
         <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🧭 偏角修正 (磁北轉真北)</label>
-        <input type="number" id="declination" value="-4.5" style="width: 80px; padding: 8px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; text-align: center;"> 
+        <input type="number" id="declination" value="-4.5" style="width: 80px; padding: 8px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; text-align: center;">
         <span style="font-size: 0.9rem; color: #666;">° (固定預設 -4.5，除非手動更改)</span>
+      </div>
+      <div class="field-group" style="margin-bottom: 0;">
+        <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">📝 備註</label>
+        <textarea id="sessionNote" rows="2" style="width: 100%; padding: 10px; font-size: 16px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box; font-family: inherit; resize: vertical;" placeholder="例如：天氣、地形、訊號干擾等（會隨報表一起分享）"></textarea>
       </div>
     </div>
     <button class="btn-record" onclick="recordPoint()">📍 自動定位</button>
+    <button class="btn-live" id="liveGpsBtn" onclick="toggleLiveGPS()">📡 即時定位：關</button>
     <button class="btn-calc" onclick="processInput()">📐 交點計算</button>
     <button class="btn-export" onclick="shareLocation()">📤 分享報表</button>
     <button class="btn-clear" onclick="clearAllData()">🗑️ 清除資料</button>
@@ -142,6 +149,21 @@
       localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
     }
 
+    // 個體編號與備註的儲存／還原（編號在清除資料時保留）
+    function loadMetaFromStorage() {
+      const savedId = localStorage.getItem('wildlife_subject_id');
+      if (savedId !== null) document.getElementById('currentSubjectId').value = savedId;
+      const savedNote = localStorage.getItem('wildlife_note');
+      if (savedNote !== null) document.getElementById('sessionNote').value = savedNote;
+
+      document.getElementById('currentSubjectId').addEventListener('input', e => {
+        localStorage.setItem('wildlife_subject_id', e.target.value);
+      });
+      document.getElementById('sessionNote').addEventListener('input', e => {
+        localStorage.setItem('wildlife_note', e.target.value);
+      });
+    }
+
     function loadPointsFromStorage() {
       const data = localStorage.getItem('wildlife_points');
       if (data) {
@@ -152,9 +174,11 @@
     }
 
     function clearAllData() {
-      if (confirm('確定要清除所有資料嗎？此動作無法還原。')) {
+      if (confirm('確定要清除所有資料嗎？此動作無法還原。\n（觀測紀錄與備註會清除，個體編號會保留）')) {
         recordedPoints = [];
         localStorage.removeItem('wildlife_points');
+        document.getElementById('sessionNote').value = '';
+        localStorage.removeItem('wildlife_note');
         renderInputTable();
         document.getElementById('pointTable').innerHTML = '';
         map.eachLayer(layer => {
@@ -337,7 +361,11 @@
         currentPrediction = { lat: avgLat, lon: avgLon };
         L.marker([avgLat, avgLon]).addTo(map)
           .bindPopup(`🎯 預測位置<br>${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}`).openPopup();
-        map.setView([avgLat, avgLon], 14);
+
+        // 地圖縮放至同時涵蓋所有觀測點與預測位置
+        const boundsPoints = validLines.map(l => [l.lat, l.lon]);
+        boundsPoints.push([avgLat, avgLon]);
+        map.fitBounds(L.latLngBounds(boundsPoints), { padding: [40, 40], maxZoom: 15 });
 
         document.getElementById('pointTable').innerHTML =
           `🎯 交點平均預測位置：<br>緯度: ${avgLat.toFixed(5)} / 經度: ${avgLon.toFixed(5)}`;
@@ -442,8 +470,10 @@
       }
       
       const mainSubjectId = document.getElementById('currentSubjectId').value || '未命名';
+      const sessionNote = document.getElementById('sessionNote').value.trim();
       let text = `【野生動物三角定位觀測紀錄】\n`;
       text += `🐾 個體編號：${mainSubjectId}\n`;
+      if (sessionNote) text += `📝 備註：${sessionNote}\n`;
       text += `--------------------------------\n`;
       text += `觀測資料（日期,時間,緯度,經度,方位角,Gain,強度,活動）：\n`;
       
@@ -477,11 +507,44 @@
       if (currentLocationCircle) map.removeLayer(currentLocationCircle);
       currentLocationCircle = L.circleMarker([lat, lon], {
         radius: 8, color: '#007bff', fillColor: '#339CFF', fillOpacity: 0.8
-      }).addTo(map).bindPopup("你的位置").openPopup();
+      }).addTo(map).bindPopup("你的位置");
+    }
+
+    // 📡 GPS 即時更新開關：開啟時用 watchPosition 持續更新藍點位置
+    let liveWatchId = null;
+    function toggleLiveGPS() {
+      const btn = document.getElementById('liveGpsBtn');
+      if (liveWatchId === null) {
+        if (!navigator.geolocation) {
+          alert('你的裝置或瀏覽器不支援定位功能');
+          return;
+        }
+        liveWatchId = navigator.geolocation.watchPosition(
+          pos => {
+            showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
+          },
+          err => {
+            alert('即時定位失敗：' + err.message);
+            navigator.geolocation.clearWatch(liveWatchId);
+            liveWatchId = null;
+            btn.textContent = '📡 即時定位：關';
+            btn.classList.remove('live-on');
+          },
+          { enableHighAccuracy: true, maximumAge: 0 }
+        );
+        btn.textContent = '📡 即時定位：開';
+        btn.classList.add('live-on');
+      } else {
+        navigator.geolocation.clearWatch(liveWatchId);
+        liveWatchId = null;
+        btn.textContent = '📡 即時定位：關';
+        btn.classList.remove('live-on');
+      }
     }
 
     window.onload = function () {
       loadPointsFromStorage();
+      loadMetaFromStorage();
       showCurrentLocationOnMap();
     };
 
