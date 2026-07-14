@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Wildlife Triangulation Tool</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet 優先載入專案內本地版（vendor/leaflet/，用 get_leaflet.ps1 下載）；沒有本地檔時自動退回 CDN -->
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';" />
   <style>
     /* 保留你原本的安全排版，僅進行美化 */
     body { 
@@ -14,10 +15,66 @@
       background-color: #f5f6fa;
     }
     
-    /* 地圖高度使用你原本的 vh 設定，放在畫面上方 */
-    #map { height: 45vh; width: 100%; border-bottom: 2px solid #ddd; }
-    
-    .input-panel { padding: 1rem; background: #fff; }
+    /* 全螢幕地圖 */
+    html, body { height: 100%; }
+    #map { position: fixed; inset: 0; height: 100dvh; width: 100%; z-index: 0; }
+
+    /* Leaflet 的縮放鈕與版權標示往上移，避免被面板把手蓋住 */
+    .leaflet-bottom { bottom: 60px; }
+
+    /* 浮動按鈕列（懸浮在地圖上、面板把手上方） */
+    .fab-bar {
+      position: fixed; left: 8px; right: 8px;
+      bottom: calc(66px + env(safe-area-inset-bottom));
+      display: flex; justify-content: center; gap: 16px;
+      z-index: 1100; pointer-events: none;
+    }
+    .fab-bar button {
+      pointer-events: auto;
+      width: 56px; height: 56px; border-radius: 50%;
+      border: none; padding: 0; margin: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #fff; color: #37474f; cursor: pointer;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+    }
+    .fab-bar button svg { width: 26px; height: 26px; }
+    .fab-bar button:active { transform: scale(0.92); }
+    .fab-bar button:disabled { opacity: 0.55; }
+    /* 定位中：十字準星旋轉 */
+    .fab-bar .btn-record.locating svg { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* 即時定位開啟中：綠底白icon＋呼吸光圈 */
+    .fab-bar .btn-live.live-on {
+      background: #2e7d32; color: #fff;
+      animation: livePulse 1.6s infinite;
+    }
+    @keyframes livePulse {
+      0%   { box-shadow: 0 0 0 0 rgba(46,125,50,0.5); }
+      70%  { box-shadow: 0 0 0 14px rgba(46,125,50,0); }
+      100% { box-shadow: 0 0 0 0 rgba(46,125,50,0); }
+    }
+
+    /* 底部上拉面板 */
+    .sheet {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200;
+      background: #fff; border-radius: 16px 16px 0 0;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.25);
+      transform: translateY(calc(100% - 52px));
+      transition: transform 0.25s ease;
+      max-height: 78dvh; display: flex; flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .sheet.open { transform: translateY(0); }
+    .sheet-handle {
+      height: 52px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 4px;
+      cursor: pointer; user-select: none; flex: 0 0 auto;
+      touch-action: none;
+    }
+    .handle-bar { width: 44px; height: 5px; border-radius: 3px; background: #c0c0c0; }
+    .sheet-title { font-size: 0.9rem; font-weight: bold; color: #2e7d32; }
+
+    .input-panel { padding: 0 1rem 1rem; background: #fff; overflow-y: auto; }
     
     h2 { margin-top: 0; font-size: 1.2rem; color: #2e7d32; display: flex; align-items: center; gap: 8px;}
 
@@ -93,12 +150,44 @@
   
   <div id="map"></div>
 
+  <!-- 懸浮在地圖上的主要操作按鈕（圓形單色 icon） -->
+  <div class="fab-bar">
+    <button class="btn-record" onclick="recordPoint()" title="自動定位" aria-label="自動定位">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="7"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+    <button class="btn-live" id="liveGpsBtn" onclick="toggleLiveGPS()" title="即時定位：關" aria-label="即時定位開關">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
+        <path d="M7.8 16.2a6 6 0 0 1 0-8.4"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4"/>
+        <path d="M4.9 19.1a10 10 0 0 1 0-14.2"/><path d="M19.1 4.9a10 10 0 0 1 0 14.2"/>
+      </svg>
+    </button>
+    <button class="btn-calc" onclick="processInput()" title="交點計算" aria-label="交點計算">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="4" y1="4" x2="20" y2="20"/><line x1="20" y1="4" x2="4" y2="20"/><circle cx="12" cy="12" r="3.2" fill="none"/>
+      </svg>
+    </button>
+    <button class="btn-export" onclick="shareLocation()" title="分享報表" aria-label="分享報表">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+        <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- 底部上拉面板：輸入欄位與觀測資料 -->
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle" id="sheetHandle" onclick="toggleSheet()">
+      <div class="handle-bar"></div>
+      <span class="sheet-title">🐾 野生動物定位工具　▲ 觀測資料</span>
+    </div>
   <div class="input-panel">
-    <h2>🐾 野生動物定位工具</h2>
     <div class="main-inputs" style="background: #e8f5e9; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #c8e6c9;">
       <div class="field-group" style="margin-bottom: 10px;">
         <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🔍 目前追蹤個體編號</label>
-        <input type="text" id="currentSubjectId" style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box;" placeholder="例如：黑熊A01">
+        <select id="subjectSelect" onchange="onSubjectSelect()" style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box; background: #fff;"></select>
       </div>
       <div class="field-group" style="margin-bottom: 10px;">
         <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🧭 偏角修正 (磁北轉真北)</label>
@@ -110,12 +199,8 @@
         <textarea id="sessionNote" rows="2" style="width: 100%; padding: 10px; font-size: 16px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box; font-family: inherit; resize: vertical;" placeholder="例如：天氣、地形、訊號干擾等（會隨報表一起分享）"></textarea>
       </div>
     </div>
-    <button class="btn-record" onclick="recordPoint()">📍 自動定位</button>
-    <button class="btn-live" id="liveGpsBtn" onclick="toggleLiveGPS()">📡 即時定位：關</button>
-    <button class="btn-calc" onclick="processInput()">📐 交點計算</button>
-    <button class="btn-export" onclick="shareLocation()">📤 分享報表</button>
     <button class="btn-clear" onclick="clearAllData()">🗑️ 清除資料</button>
-    
+
     <div class="example-block">
       💡 提示：左右滑動下方表格以填寫「方位角、Gain、強度、活動」
     </div>
@@ -132,8 +217,15 @@
     
     <div id="pointTable"></div>
   </div>
+  </div><!-- /sheet -->
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script>
+    // 本地 Leaflet 尚未下載時退回 CDN
+    if (typeof L === 'undefined') {
+      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+    }
+  </script>
   <script>
     const map = L.map('map').setView([23.5, 121], 7);
     L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
@@ -144,48 +236,123 @@
     let recordedPoints = [];
     let currentPrediction = null;
     let currentLocationCircle = null;
+    let errorCircle = null;
 
-    function savePointsToStorage() {
-      localStorage.setItem('wildlife_points', JSON.stringify(recordedPoints));
+    // === 多個體資料管理：每個個體編號各存一份觀測資料、備註與計算結果 ===
+    let sessions = {};
+    let currentSubject = '未命名';
+
+    function saveCurrentSession() {
+      sessions[currentSubject] = {
+        points: recordedPoints,
+        note: document.getElementById('sessionNote').value,
+        prediction: currentPrediction
+      };
+      localStorage.setItem('wildlife_sessions', JSON.stringify(sessions));
+      localStorage.setItem('wildlife_current_subject', currentSubject);
     }
+    // 相容原本各處的呼叫
+    function savePointsToStorage() { saveCurrentSession(); }
 
-    // 個體編號與備註的儲存／還原（編號在清除資料時保留）
-    function loadMetaFromStorage() {
-      const savedId = localStorage.getItem('wildlife_subject_id');
-      if (savedId !== null) document.getElementById('currentSubjectId').value = savedId;
-      const savedNote = localStorage.getItem('wildlife_note');
-      if (savedNote !== null) document.getElementById('sessionNote').value = savedNote;
-
-      document.getElementById('currentSubjectId').addEventListener('input', e => {
-        localStorage.setItem('wildlife_subject_id', e.target.value);
-      });
-      document.getElementById('sessionNote').addEventListener('input', e => {
-        localStorage.setItem('wildlife_note', e.target.value);
-      });
-    }
-
-    function loadPointsFromStorage() {
-      const data = localStorage.getItem('wildlife_points');
-      if (data) {
-        try { recordedPoints = JSON.parse(data); } catch (e) { recordedPoints = []; }
-      }
-      recordedPoints.forEach(p => { if(!p.isActive) p.isActive = '否'; });
+    function loadSession(id) {
+      currentSubject = id;
+      const s = sessions[id] || { points: [], note: '', prediction: null };
+      recordedPoints = s.points || [];
+      recordedPoints.forEach(p => { if (!p.isActive) p.isActive = '否'; });
+      document.getElementById('sessionNote').value = s.note || '';
+      currentPrediction = s.prediction || null;
+      localStorage.setItem('wildlife_current_subject', currentSubject);
       renderInputTable();
+      updateResultDisplay(true);
+      clearCalcLayers();
+    }
+
+    function refreshSubjectOptions() {
+      const sel = document.getElementById('subjectSelect');
+      sel.innerHTML = '';
+      Object.keys(sessions).forEach(id => {
+        const o = document.createElement('option');
+        o.value = id; o.textContent = id;
+        sel.appendChild(o);
+      });
+      const nw = document.createElement('option');
+      nw.value = '__new__'; nw.textContent = '➕ 新增個體…';
+      sel.appendChild(nw);
+      sel.value = currentSubject;
+    }
+
+    function onSubjectSelect() {
+      const sel = document.getElementById('subjectSelect');
+      if (sel.value === '__new__') {
+        const name = prompt('輸入新個體編號（例如：黑熊A02）');
+        if (!name || !name.trim()) { sel.value = currentSubject; return; }
+        const id = name.trim();
+        saveCurrentSession();
+        if (!sessions[id]) sessions[id] = { points: [], note: '', prediction: null };
+        loadSession(id);
+        saveCurrentSession();
+        refreshSubjectOptions();
+      } else if (sel.value !== currentSubject) {
+        saveCurrentSession();
+        loadSession(sel.value);
+        refreshSubjectOptions();
+      }
+    }
+
+    // 初始化：載入所有個體資料；舊版單一份資料自動轉移
+    function initSessions() {
+      try { sessions = JSON.parse(localStorage.getItem('wildlife_sessions')) || {}; } catch (e) { sessions = {}; }
+      const legacyPoints = localStorage.getItem('wildlife_points');
+      if (legacyPoints) {
+        const legacyId = (localStorage.getItem('wildlife_subject_id') || '').trim() || '未命名';
+        let pts = []; try { pts = JSON.parse(legacyPoints) || []; } catch (e) {}
+        let pred = null; try { pred = JSON.parse(localStorage.getItem('wildlife_prediction')); } catch (e) {}
+        if (!sessions[legacyId]) {
+          sessions[legacyId] = { points: pts, note: localStorage.getItem('wildlife_note') || '', prediction: pred };
+        }
+        ['wildlife_points', 'wildlife_note', 'wildlife_prediction'].forEach(k => localStorage.removeItem(k));
+      }
+      currentSubject = localStorage.getItem('wildlife_current_subject')
+        || (localStorage.getItem('wildlife_subject_id') || '').trim()
+        || Object.keys(sessions)[0] || '未命名';
+      localStorage.removeItem('wildlife_subject_id');
+      if (!sessions[currentSubject]) sessions[currentSubject] = { points: [], note: '', prediction: null };
+      localStorage.setItem('wildlife_sessions', JSON.stringify(sessions));
+      loadSession(currentSubject);
+      refreshSubjectOptions();
+      document.getElementById('sessionNote').addEventListener('input', () => saveCurrentSession());
+    }
+
+    // 清除地圖上的計算圖層（觀測點、射線、預測標記、誤差圓）
+    function clearCalcLayers() {
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
+      });
+      if (errorCircle) { map.removeLayer(errorCircle); errorCircle = null; }
+    }
+
+    // 顯示計算結果（含誤差半徑）
+    function updateResultDisplay(fromSaved = false) {
+      const el = document.getElementById('pointTable');
+      if (currentPrediction) {
+        const rText = (currentPrediction.r != null)
+          ? `<br>誤差半徑（交點標準距離）：約 ${Math.round(currentPrediction.r)} 公尺`
+          : '';
+        el.innerHTML = `🎯 交點平均預測位置${fromSaved ? '（上次計算結果）' : ''}：<br>緯度: ${currentPrediction.lat.toFixed(5)} / 經度: ${currentPrediction.lon.toFixed(5)}${rText}`;
+      } else {
+        el.innerHTML = '';
+      }
     }
 
     function clearAllData() {
-      if (confirm('確定要清除所有資料嗎？此動作無法還原。\n（觀測紀錄與備註會清除，個體編號會保留）')) {
+      if (confirm(`確定要清除「${currentSubject}」的所有資料嗎？此動作無法還原。\n（清除觀測紀錄、備註與計算結果；個體仍保留在清單中）`)) {
         recordedPoints = [];
-        localStorage.removeItem('wildlife_points');
         document.getElementById('sessionNote').value = '';
-        localStorage.removeItem('wildlife_note');
-        localStorage.removeItem('wildlife_prediction');
-        renderInputTable();
-        document.getElementById('pointTable').innerHTML = '';
-        map.eachLayer(layer => {
-          if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
-        });
         currentPrediction = null;
+        saveCurrentSession();
+        renderInputTable();
+        updateResultDisplay();
+        clearCalcLayers();
         showCurrentLocationOnMap();
       }
     }
@@ -325,9 +492,7 @@
     }
 
     function displayPointsAndCalculate(points) {
-      map.eachLayer(layer => {
-        if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
-      });
+      clearCalcLayers();
       showCurrentLocationOnMap();
 
       const validLines = [];
@@ -359,20 +524,38 @@
       if (intersections.length > 0) {
         const avgLat = intersections.reduce((sum, p) => sum + p[0], 0) / intersections.length;
         const avgLon = intersections.reduce((sum, p) => sum + p[1], 0) / intersections.length;
-        currentPrediction = { lat: avgLat, lon: avgLon };
-        localStorage.setItem('wildlife_prediction', JSON.stringify(currentPrediction)); // 保存結果，重開網頁分享時仍帶得出來
+
+        // 估位誤差圓：各交點到平均位置的標準距離（RMS，公尺）
+        // 圓越小代表射線交會越集中；此為精密度指標，非與真實位置的誤差
+        let errorRadius = null;
+        if (intersections.length >= 2) {
+          const mPerDegLat = 111320;
+          const mPerDegLon = 111320 * Math.cos(avgLat * Math.PI / 180);
+          const sumSq = intersections.reduce((s, p) => {
+            const dy = (p[0] - avgLat) * mPerDegLat;
+            const dx = (p[1] - avgLon) * mPerDegLon;
+            return s + dx * dx + dy * dy;
+          }, 0);
+          errorRadius = Math.sqrt(sumSq / intersections.length);
+          errorCircle = L.circle([avgLat, avgLon], {
+            radius: errorRadius, color: '#d32f2f', weight: 2, dashArray: '6 4',
+            fillColor: '#d32f2f', fillOpacity: 0.08
+          }).addTo(map).bindPopup(`誤差半徑（交點標準距離）：約 ${Math.round(errorRadius)} 公尺`);
+        }
+
+        currentPrediction = { lat: avgLat, lon: avgLon, r: errorRadius };
         L.marker([avgLat, avgLon]).addTo(map)
           .bindPopup(`🎯 預測位置<br>${avgLat.toFixed(5)}, ${avgLon.toFixed(5)}`).openPopup();
 
         // 地圖縮放以交會點為主：涵蓋所有射線交點（含預測位置）
         map.fitBounds(L.latLngBounds(intersections), { padding: [40, 40], maxZoom: 15 });
 
-        document.getElementById('pointTable').innerHTML =
-          `🎯 交點平均預測位置：<br>緯度: ${avgLat.toFixed(5)} / 經度: ${avgLon.toFixed(5)}`;
+        saveCurrentSession();
+        updateResultDisplay();
       } else {
         currentPrediction = null;
-        localStorage.removeItem('wildlife_prediction');
-        document.getElementById('pointTable').innerHTML = '';
+        saveCurrentSession();
+        updateResultDisplay();
       }
     }
 
@@ -415,13 +598,12 @@
       }
     
       const btn = document.querySelector('.btn-record');
-      const originalText = btn.textContent;
-      btn.textContent = '⏳ 定位中...';
+      btn.classList.add('locating');
       btn.disabled = true;
     
       navigator.geolocation.getCurrentPosition(
         pos => {
-          btn.textContent = originalText;
+          btn.classList.remove('locating');
           btn.disabled = false;
     
           // 1. 自動取得目前的日期與時間
@@ -434,8 +616,8 @@
           const currentLat = pos.coords.latitude.toFixed(5);
           const currentLon = pos.coords.longitude.toFixed(5);
           
-          // 3. 取得上方大欄位的個體編號
-          const subjectId = document.getElementById('currentSubjectId').value;
+          // 3. 取得目前追蹤的個體編號
+          const subjectId = currentSubject;
     
           // 4. 將所有資訊正確推入紀錄陣列
           recordedPoints.push({
@@ -456,7 +638,7 @@
           showCurrentLocationOnMap(pos.coords.latitude, pos.coords.longitude);
         },
         err => {
-          btn.textContent = originalText;
+          btn.classList.remove('locating');
           btn.disabled = false;
           alert('無法取得定位：' + err.message);
         },
@@ -470,7 +652,7 @@
         return; 
       }
       
-      const mainSubjectId = document.getElementById('currentSubjectId').value || '未命名';
+      const mainSubjectId = currentSubject || '未命名';
       const sessionNote = document.getElementById('sessionNote').value.trim();
       let text = `【野生動物三角定位觀測紀錄】\n`;
       text += `🐾 個體編號：${mainSubjectId}\n`;
@@ -485,6 +667,9 @@
       
       if (currentPrediction) {
         text += `\n🎯 預測位置：\n緯度: ${currentPrediction.lat.toFixed(5)}, 經度: ${currentPrediction.lon.toFixed(5)}\n`;
+        if (currentPrediction.r != null) {
+          text += `誤差半徑（交點標準距離）：約 ${Math.round(currentPrediction.r)} 公尺\n`;
+        }
         text += `Google地圖：https://www.google.com/maps?q=${currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}\n`;
       }
     
@@ -553,33 +738,43 @@
             alert('即時定位失敗：' + err.message);
             navigator.geolocation.clearWatch(liveWatchId);
             liveWatchId = null;
-            btn.textContent = '📡 即時定位：關';
+            btn.title = '即時定位：關';
             btn.classList.remove('live-on');
           },
           { enableHighAccuracy: true, maximumAge: 0 }
         );
-        btn.textContent = '📡 即時定位：開';
+        btn.title = '即時定位：開';
         btn.classList.add('live-on');
       } else {
         navigator.geolocation.clearWatch(liveWatchId);
         liveWatchId = null;
-        btn.textContent = '📡 即時定位：關';
+        btn.title = '即時定位：關';
         btn.classList.remove('live-on');
       }
     }
 
+    // 底部面板展開／收合（點把手或上下滑動）
+    function toggleSheet(open = null) {
+      const sheet = document.getElementById('sheet');
+      if (open === true) sheet.classList.add('open');
+      else if (open === false) sheet.classList.remove('open');
+      else sheet.classList.toggle('open');
+    }
+    (function () {
+      let startY = null;
+      const handle = document.getElementById('sheetHandle');
+      handle.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true });
+      handle.addEventListener('touchend', e => {
+        if (startY === null) return;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (dy < -30) toggleSheet(true);
+        else if (dy > 30) toggleSheet(false);
+        startY = null;
+      }, { passive: true });
+    })();
+
     window.onload = function () {
-      loadPointsFromStorage();
-      loadMetaFromStorage();
-      // 還原上次的交點計算結果，重開網頁後分享仍會帶出預測位置與 Google 地圖連結
-      const savedPred = localStorage.getItem('wildlife_prediction');
-      if (savedPred) {
-        try { currentPrediction = JSON.parse(savedPred); } catch (e) { currentPrediction = null; }
-        if (currentPrediction) {
-          document.getElementById('pointTable').innerHTML =
-            `🎯 交點平均預測位置（上次計算結果）：<br>緯度: ${currentPrediction.lat.toFixed(5)} / 經度: ${currentPrediction.lon.toFixed(5)}`;
-        }
-      }
+      initSessions();
       showCurrentLocationOnMap();
     };
 
