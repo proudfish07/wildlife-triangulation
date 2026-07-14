@@ -8,11 +8,21 @@
   <!-- Leaflet 優先載入專案內本地版（vendor/leaflet/，用 get_leaflet.ps1 下載）；沒有本地檔時自動退回 CDN -->
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';" />
   <style>
-    /* 保留你原本的安全排版，僅進行美化 */
-    body { 
-      margin: 0; 
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-      background-color: #f5f6fa;
+    /* 整體配色：森林綠系 */
+    :root {
+      --primary: #2d6a4f;        /* 主綠 */
+      --primary-dark: #1b4332;   /* 深綠 */
+      --accent-bg: #eef4ef;      /* 淺綠底 */
+      --card-border: #dfe7e0;    /* 卡片邊框 */
+      --text: #263238;           /* 主文字 */
+      --muted: #7d8a80;          /* 次要文字 */
+      --danger: #c9504c;         /* 警示紅 */
+    }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f2f5f2;
+      color: var(--text);
     }
     
     /* 全螢幕地圖 */
@@ -45,13 +55,13 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     /* 即時定位開啟中：綠底白icon＋呼吸光圈 */
     .fab-bar .btn-live.live-on {
-      background: #2e7d32; color: #fff;
+      background: var(--primary); color: #fff;
       animation: livePulse 1.6s infinite;
     }
     @keyframes livePulse {
-      0%   { box-shadow: 0 0 0 0 rgba(46,125,50,0.5); }
-      70%  { box-shadow: 0 0 0 14px rgba(46,125,50,0); }
-      100% { box-shadow: 0 0 0 0 rgba(46,125,50,0); }
+      0%   { box-shadow: 0 0 0 0 rgba(45,106,79,0.5); }
+      70%  { box-shadow: 0 0 0 14px rgba(45,106,79,0); }
+      100% { box-shadow: 0 0 0 0 rgba(45,106,79,0); }
     }
 
     /* 底部上拉面板 */
@@ -72,15 +82,15 @@
       touch-action: none;
     }
     .handle-bar { width: 44px; height: 5px; border-radius: 3px; background: #c0c0c0; }
-    .sheet-title { font-size: 0.9rem; font-weight: bold; color: #2e7d32; }
+    .sheet-title { font-size: 0.9rem; font-weight: bold; color: var(--primary); }
 
     .input-panel { padding: 0 1rem 1rem; background: #fff; overflow-y: auto; }
     
     h2 { margin-top: 0; font-size: 1.2rem; color: #2e7d32; display: flex; align-items: center; gap: 8px;}
 
-    /* 按鈕美化，保留原本的 margin 排列方式 */
-    .input-panel button { 
-      margin: 0.25rem 0.25rem 0.5rem 0; 
+    /* 面板主要動作按鈕（僅直屬按鈕，如清除資料；卡片內按鈕各自定義樣式） */
+    .input-panel > button {
+      margin: 0.25rem 0.25rem 0.5rem 0;
       padding: 0.6rem 0.8rem;
       border: none;
       border-radius: 8px;
@@ -90,59 +100,63 @@
       font-size: 0.9rem;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .btn-record { background-color: #2e7d32; }
-    .btn-live { background-color: #757575; }
-    .btn-live.live-on { background-color: #673ab7; }
-    .btn-calc { background-color: #1976d2; }
-    .btn-export { background-color: #546e7a; }
-    .btn-clear { background-color: #d32f2f; }
-    
-    .example-block { color: #666; font-size: 0.85em; margin-bottom: 0.5em; background: #e8f5e9; padding: 8px; border-radius: 6px;}
+    .btn-clear { background-color: var(--danger); }
+
+    .example-block { color: var(--muted); font-size: 0.85em; margin-bottom: 0.5em; background: var(--accent-bg); padding: 8px 10px; border-radius: 8px;}
     .example-block span { font-family: monospace; white-space: pre; }
 
-    /* 完全保留你原本的橫向滾動邏輯，確保手機上正常運作 */
-    .input-table {
-      display: block;
-      width: 100%;
-      overflow-x: auto;
-      white-space: nowrap;
-      border-collapse: collapse; 
-      margin-top: 0.5rem;
+    /* === 觀測紀錄卡片 === */
+    #recordList { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 10px; }
+    .rec-empty { color: var(--muted); text-align: center; padding: 1.2rem 0; font-size: 0.95rem; }
+    .rec-card {
+      background: #fff; border: 1px solid var(--card-border); border-radius: 12px;
+      padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    .input-table th { background-color: #f0f0f0; color: #333; padding: 0.6rem; border: 1px solid #ccc; text-align: center; }
-    .input-table td { padding: 0.4rem; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle; }
-    
-    /* 修改原本的 .input-table input 部分 */
-    .input-table input {
-      min-width: 4em;
-      width: 100%;
-      box-sizing: border-box;
-      padding: 6px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      text-align: center;
+    /* 第一層：序號＋日期時間（唯讀） */
+    .rec-meta {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.85rem; color: var(--muted); margin-bottom: 8px;
     }
-    
-    /* 活動狀態按鈕 */
+    .rec-no { font-weight: bold; color: var(--primary); }
+    /* 第二層：經緯度座標（可修改） */
+    .rec-coords { display: flex; gap: 8px; margin-bottom: 8px; }
+    /* 第三層：方位角、Gain、強度、活動、刪除 */
+    .rec-inputs { display: flex; gap: 6px; align-items: flex-end; }
+    .rec-field { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+    .rec-field span { font-size: 0.75rem; color: var(--muted); }
+    .rec-field input {
+      width: 100%; box-sizing: border-box; padding: 8px 4px;
+      border: 1.5px solid var(--card-border); border-radius: 8px;
+      text-align: center; font-size: 1rem;
+    }
+    .rec-field input:focus { outline: none; border-color: var(--primary); }
+    .rec-bearing { flex: 1.7; }
+    .bearing-group { display: flex; gap: 4px; }
+    .bearing-group input { flex: 1; }
+    .compass-btn {
+      border: none; border-radius: 8px; background: var(--primary); color: #fff;
+      width: 38px; cursor: pointer; font-size: 1rem; flex: 0 0 auto;
+    }
+    .compass-btn.reading { background: var(--danger); }
+    /* 活動：是（綠）／否（紅），單字切換 */
     .btn-status {
-      padding: 6px 10px !important;
-      border-radius: 6px !important;
-      font-size: 0.85rem !important;
-      margin: 0 !important;
-      box-shadow: none !important;
-      width: 50px;
+      border: none; border-radius: 8px; width: 42px; height: 38px;
+      font-size: 1rem; font-weight: bold; color: #fff; cursor: pointer; flex: 0 0 auto;
     }
-    .status-yes { background-color: #4caf50 !important; color: white; }
-    .status-no { background-color: #f44336 !important; color: white; }
-    
-    .op-btn button { background-color: #ff9800; padding: 6px 10px; margin: 0; }
+    .status-yes { background-color: var(--primary); }
+    .status-no { background-color: var(--danger); }
+    /* 刪除：紅色叉叉 */
+    .btn-del {
+      border: none; background: none; color: var(--danger);
+      width: 34px; height: 38px; font-size: 1.3rem; font-weight: bold;
+      cursor: pointer; flex: 0 0 auto; line-height: 1;
+    }
 
-    #pointTable { margin-top: 1rem; padding: 10px; background: #e3f2fd; border-radius: 8px; font-weight: bold; color: #1565c0;}
+    #pointTable:not(:empty) { margin-top: 1rem; padding: 10px 12px; background: var(--accent-bg); border-radius: 10px; font-weight: bold; color: var(--primary-dark); }
 
     @media (max-width: 600px) {
-      .input-panel { padding: 0.8rem; }
-      .input-table th, .input-table td { padding: 0.3rem; font-size: 0.9em; }
-      .input-panel button { font-size: 0.9em; padding: 0.5rem 0.7rem; }
+      .input-panel { padding: 0 0.8rem 0.8rem; }
+      .input-panel > button, .input-panel .btn-clear { font-size: 0.9em; padding: 0.5rem 0.7rem; }
     }
   </style>
 </head>
@@ -184,36 +198,28 @@
       <span class="sheet-title">🐾 野生動物定位工具　▲ 觀測資料</span>
     </div>
   <div class="input-panel">
-    <div class="main-inputs" style="background: #e8f5e9; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #c8e6c9;">
+    <div class="main-inputs" style="background: var(--accent-bg); padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid var(--card-border);">
       <div class="field-group" style="margin-bottom: 10px;">
-        <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🔍 目前追蹤個體編號</label>
-        <select id="subjectSelect" onchange="onSubjectSelect()" style="width: 100%; padding: 10px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box; background: #fff;"></select>
+        <label style="display: block; font-weight: bold; color: var(--primary); margin-bottom: 5px;">🔍 目前追蹤個體編號</label>
+        <select id="subjectSelect" onchange="onSubjectSelect()" style="width: 100%; padding: 10px; font-size: 18px; border: 1.5px solid var(--card-border); border-radius: 8px; box-sizing: border-box; background: #fff;"></select>
       </div>
       <div class="field-group" style="margin-bottom: 10px;">
-        <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">🧭 偏角修正 (磁北轉真北)</label>
-        <input type="number" id="declination" value="-4.5" style="width: 80px; padding: 8px; font-size: 18px; border: 2px solid #81c784; border-radius: 8px; text-align: center;">
-        <span style="font-size: 0.9rem; color: #666;">° (固定預設 -4.5，除非手動更改)</span>
+        <label style="display: block; font-weight: bold; color: var(--primary); margin-bottom: 5px;">🧭 偏角修正 (磁北轉真北)</label>
+        <input type="number" id="declination" value="-4.5" style="width: 80px; padding: 8px; font-size: 18px; border: 1.5px solid var(--card-border); border-radius: 8px; text-align: center;">
+        <span style="font-size: 0.9rem; color: var(--muted);">° (固定預設 -4.5，除非手動更改)</span>
       </div>
       <div class="field-group" style="margin-bottom: 0;">
-        <label style="display: block; font-weight: bold; color: #2e7d32; margin-bottom: 5px;">📝 備註</label>
-        <textarea id="sessionNote" rows="2" style="width: 100%; padding: 10px; font-size: 16px; border: 2px solid #81c784; border-radius: 8px; box-sizing: border-box; font-family: inherit; resize: vertical;" placeholder="例如：天氣、地形、訊號干擾等（會隨報表一起分享）"></textarea>
+        <label style="display: block; font-weight: bold; color: var(--primary); margin-bottom: 5px;">📝 備註</label>
+        <textarea id="sessionNote" rows="2" style="width: 100%; padding: 10px; font-size: 16px; border: 1.5px solid var(--card-border); border-radius: 8px; box-sizing: border-box; font-family: inherit; resize: vertical;" placeholder="例如：天氣、地形、訊號干擾等（會隨報表一起分享）"></textarea>
       </div>
     </div>
     <button class="btn-clear" onclick="clearAllData()">🗑️ 清除資料</button>
 
     <div class="example-block">
-      💡 提示：左右滑動下方表格以填寫「方位角、Gain、強度、活動」
+      💡 日期時間由 GPS 自動帶入（不可修改）；座標可直接修改，方位角可按 🧭 即時讀值
     </div>
-    
-    <table class="input-table" id="inputTable">
-      <thead>
-        <tr>
-          <th>個體編號</th><th>日期</th><th>時間</th><th>緯度</th><th>經度</th>
-          <th>方位角</th><th>Gain</th><th>強度</th><th>活動</th><th>操作</th>
-        </tr>
-      </thead>
-      <tbody id="inputTableBody"></tbody>
-    </table>
+
+    <div id="recordList"></div>
     
     <div id="pointTable"></div>
   </div>
@@ -364,82 +370,136 @@
     }
 
     function renderInputTable() {
-      if (typeof stopLiveCompass === 'function') stopLiveCompass(true); // 表格重繪前先鎖定進行中的指南針讀值
-      const tbody = document.getElementById('inputTableBody');
-      tbody.innerHTML = '';
+      if (typeof stopLiveCompass === 'function') stopLiveCompass(true); // 重繪前先鎖定進行中的指南針讀值
+      const list = document.getElementById('recordList');
+      list.innerHTML = '';
+
+      if (recordedPoints.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'rec-empty';
+        empty.textContent = '尚無觀測資料：按地圖上的定位鈕新增一筆';
+        list.appendChild(empty);
+        return;
+      }
+
       recordedPoints.forEach((p, idx) => {
-        const row = document.createElement('tr');
-        
-        // 嚴格對照標題順序：編號 -> 日期 -> 時間 -> 緯度 -> 經度 -> 方位角 -> Gain -> 強度
-        ['id', 'date', 'time', 'lat', 'lon', 'bearing', 'gain', 'strength'].forEach(key => {
-          const td = document.createElement('td');
-          const input = document.createElement('input');
-          
-          // 設定屬性
-          input.type = (key === 'id' || key === 'date' || key === 'time') ? 'text' : 'number';
-          input.value = (p[key] !== null && p[key] !== undefined) ? p[key] : '';
-          
-          // 更新資料邏輯
-          input.oninput = () => {
-            recordedPoints[idx][key] = input.value;
+        const card = document.createElement('div');
+        card.className = 'rec-card';
+
+        // --- 第一層：序號＋日期時間（唯讀，鎖定） ---
+        const meta = document.createElement('div');
+        meta.className = 'rec-meta';
+
+        const noEl = document.createElement('span');
+        noEl.className = 'rec-no';
+        noEl.textContent = '#' + (idx + 1);
+
+        const dtEl = document.createElement('span');
+        dtEl.className = 'rec-dt';
+        dtEl.textContent = `${p.date || ''} ${p.time || ''}`.trim() || '—';
+
+        meta.appendChild(noEl);
+        meta.appendChild(dtEl);
+        card.appendChild(meta);
+
+        // --- 第二層：經緯度座標（可修改） ---
+        const coords = document.createElement('div');
+        coords.className = 'rec-coords';
+        [['lat', '緯度'], ['lon', '經度']].forEach(([key, cap]) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'rec-field';
+          const capEl = document.createElement('span');
+          capEl.textContent = cap;
+          const inp = document.createElement('input');
+          inp.type = 'number';
+          inp.step = 'any';
+          inp.value = (p[key] !== null && p[key] !== undefined) ? p[key] : '';
+          inp.oninput = () => {
+            recordedPoints[idx][key] = inp.value;
             savePointsToStorage();
           };
-    
-          // 處理方位角 Compass 按鈕
-          if (key === 'bearing') {
-            const container = document.createElement('div');
-            container.style.display = 'flex';
-            container.style.gap = '2px';
-            container.style.alignItems = 'center';
-            input.style.flex = '1';
-            
-            const compassBtn = document.createElement('button');
-            compassBtn.textContent = '🧭';
-            compassBtn.style.padding = '4px';
-            compassBtn.style.margin = '0';
-            compassBtn.style.backgroundColor = '#673ab7';
-            compassBtn.style.border = 'none';
-            compassBtn.style.borderRadius = '4px';
-            compassBtn.style.color = 'white';
-            compassBtn.onclick = () => {
-              if (liveCompass && liveCompass.btn === compassBtn) {
-                stopLiveCompass(true);   // 第二次按：鎖定目前顯示的數值
-              } else {
-                startLiveCompass(compassBtn, input, idx);  // 第一次按：開始即時讀值
-              }
-            };
-            container.appendChild(input);
-            container.appendChild(compassBtn);
-            td.appendChild(container);
-          } else {
-            td.appendChild(input);
-          }
-          row.appendChild(td);
+          wrap.appendChild(capEl);
+          wrap.appendChild(inp);
+          coords.appendChild(wrap);
         });
-    
-        // 活動狀態按鈕
-        const tdActive = document.createElement('td');
+        card.appendChild(coords);
+
+        // --- 第三層：方位角（含🧭）、Gain、強度、活動、刪除 ---
+        const inputs = document.createElement('div');
+        inputs.className = 'rec-inputs';
+
+        const bWrap = document.createElement('label');
+        bWrap.className = 'rec-field rec-bearing';
+        const bCap = document.createElement('span');
+        bCap.textContent = '方位角 °';
+        const bGroup = document.createElement('div');
+        bGroup.className = 'bearing-group';
+        const bInput = document.createElement('input');
+        bInput.type = 'number';
+        bInput.step = 'any';
+        bInput.value = (p.bearing !== null && p.bearing !== undefined) ? p.bearing : '';
+        bInput.oninput = () => { recordedPoints[idx].bearing = bInput.value; savePointsToStorage(); };
+        const compassBtn = document.createElement('button');
+        compassBtn.type = 'button';
+        compassBtn.className = 'compass-btn';
+        compassBtn.textContent = '🧭';
+        compassBtn.onclick = () => {
+          if (liveCompass && liveCompass.btn === compassBtn) {
+            stopLiveCompass(true);   // 第二次按：鎖定目前顯示的數值
+          } else {
+            startLiveCompass(compassBtn, bInput, idx);  // 第一次按：開始即時讀值
+          }
+        };
+        bGroup.appendChild(bInput);
+        bGroup.appendChild(compassBtn);
+        bWrap.appendChild(bCap);
+        bWrap.appendChild(bGroup);
+        inputs.appendChild(bWrap);
+
+        [['gain', 'Gain'], ['strength', '強度']].forEach(([key, cap]) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'rec-field';
+          const capEl = document.createElement('span');
+          capEl.textContent = cap;
+          const inp = document.createElement('input');
+          inp.type = 'number';
+          inp.step = 'any';
+          inp.value = (p[key] !== null && p[key] !== undefined) ? p[key] : '';
+          inp.oninput = () => { recordedPoints[idx][key] = inp.value; savePointsToStorage(); };
+          wrap.appendChild(capEl);
+          wrap.appendChild(inp);
+          inputs.appendChild(wrap);
+        });
+        // 活動：是（綠）／否（紅）
+        const aWrap = document.createElement('div');
+        aWrap.className = 'rec-field';
+        aWrap.style.flex = '0 0 auto';
+        const aCap = document.createElement('span');
+        aCap.textContent = '活動';
         const btnActive = document.createElement('button');
+        btnActive.type = 'button';
         btnActive.className = 'btn-status ' + (p.isActive === '是' ? 'status-yes' : 'status-no');
         btnActive.textContent = p.isActive || '否';
         btnActive.onclick = () => toggleStatus(idx);
-        tdActive.appendChild(btnActive);
-        row.appendChild(tdActive);
-    
-        // 刪除按鈕
-        const tdDel = document.createElement('td');
-        tdDel.className = 'op-btn';
+        aWrap.appendChild(aCap);
+        aWrap.appendChild(btnActive);
+        inputs.appendChild(aWrap);
+
+        // 刪除：紅色叉叉
         const btnDel = document.createElement('button');
-        btnDel.textContent = '刪除';
+        btnDel.type = 'button';
+        btnDel.className = 'btn-del';
+        btnDel.textContent = '✕';
+        btnDel.title = '刪除這筆紀錄';
         btnDel.onclick = () => {
-          recordedPoints.splice(idx,1);
+          recordedPoints.splice(idx, 1);
           savePointsToStorage();
           renderInputTable();
         };
-        tdDel.appendChild(btnDel);
-        row.appendChild(tdDel);
-        
-        tbody.appendChild(row);
+        inputs.appendChild(btnDel);
+
+        card.appendChild(inputs);
+        list.appendChild(card);
       });
     }
 
@@ -453,7 +513,7 @@
       window.removeEventListener(liveCompass.eventName, liveCompass.handler);
       const { btn, input, idx } = liveCompass;
       btn.textContent = '🧭';
-      btn.style.backgroundColor = '#673ab7';
+      btn.classList.remove('reading');
       if (commit && input.value !== '' && recordedPoints[idx]) {
         recordedPoints[idx].bearing = input.value;
         savePointsToStorage();
@@ -485,7 +545,7 @@
         window.addEventListener(eventName, handler);
         liveCompass = { handler, eventName, btn, input, idx };
         btn.textContent = '✅';
-        btn.style.backgroundColor = '#d32f2f'; // 紅色提示讀取中，再按一下鎖定
+        btn.classList.add('reading'); // 紅色提示讀取中，再按一下鎖定
       };
 
       if (isIOS) {
