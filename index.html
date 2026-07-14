@@ -492,6 +492,7 @@
         btnDel.textContent = '✕';
         btnDel.title = '刪除這筆紀錄';
         btnDel.onclick = () => {
+          if (!confirm(`確定要刪除第 ${idx + 1} 筆紀錄嗎？\n（${p.date || ''} ${p.time || ''}）`)) return;
           recordedPoints.splice(idx, 1);
           savePointsToStorage();
           renderInputTable();

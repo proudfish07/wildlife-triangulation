@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wildlife-triangulation-v3';
+const CACHE_NAME = 'wildlife-triangulation-v4';
 const urlsToCache = [
   './',
   './index.html',
@@ -30,9 +30,27 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
+  const req = event.request;
+
+  // HTML／頁面導覽採「網路優先」：有網路一定拿最新版，離線才退回快取
+  if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
+    event.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
+          return res;
+        })
+        .catch(() =>
+          caches.match(req).then(r => r || caches.match('./index.html'))
+        )
+    );
+    return;
+  }
+
+  // 其他資源（圖磚、程式庫等）維持快取優先，確保離線可用
   event.respondWith(
-    caches.match(event.request)
-      .then(response => response || fetch(event.request))
+    caches.match(req).then(response => response || fetch(req))
   );
 });
 
