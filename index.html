@@ -364,6 +364,7 @@
     }
 
     function renderInputTable() {
+      if (typeof stopLiveCompass === 'function') stopLiveCompass(true); // 表格重繪前先鎖定進行中的指南針讀值
       const tbody = document.getElementById('inputTableBody');
       tbody.innerHTML = '';
       recordedPoints.forEach((p, idx) => {
@@ -401,11 +402,11 @@
             compassBtn.style.borderRadius = '4px';
             compassBtn.style.color = 'white';
             compassBtn.onclick = () => {
-              getDeviceHeading((val) => {
-                input.value = val;
-                recordedPoints[idx][key] = val;
-                savePointsToStorage();
-              });
+              if (liveCompass && liveCompass.btn === compassBtn) {
+                stopLiveCompass(true);   // 第二次按：鎖定目前顯示的數值
+              } else {
+                startLiveCompass(compassBtn, input, idx);  // 第一次按：開始即時讀值
+              }
             };
             container.appendChild(input);
             container.appendChild(compassBtn);
@@ -443,35 +444,59 @@
     }
 
     function bearingToRadians(b) { return b * Math.PI / 180; }
-    // 取得手機方位角（已整合磁偏角）
-    function getDeviceHeading(callback) {
-      const declination = parseFloat(document.getElementById('declination').value) || 0;
-    
-      // 處理 iOS 權限要求
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+
+    // === 指南針即時讀值：按一下 🧭 開始（數值隨手機轉動跳動），再按一下鎖定填入 ===
+    let liveCompass = null; // { handler, eventName, btn, input, idx }
+
+    function stopLiveCompass(commit = true) {
+      if (!liveCompass) return;
+      window.removeEventListener(liveCompass.eventName, liveCompass.handler);
+      const { btn, input, idx } = liveCompass;
+      btn.textContent = '🧭';
+      btn.style.backgroundColor = '#673ab7';
+      if (commit && input.value !== '' && recordedPoints[idx]) {
+        recordedPoints[idx].bearing = input.value;
+        savePointsToStorage();
+      }
+      liveCompass = null;
+    }
+
+    function startLiveCompass(btn, input, idx) {
+      stopLiveCompass(true); // 若其他列正在讀取，先替它鎖定
+
+      const isIOS = typeof DeviceOrientationEvent !== 'undefined'
+        && typeof DeviceOrientationEvent.requestPermission === 'function';
+
+      const attach = () => {
+        const eventName = isIOS ? 'deviceorientation' : 'deviceorientationabsolute';
+        const handler = (e) => {
+          const declination = parseFloat(document.getElementById('declination').value) || 0;
+          let heading;
+          if (isIOS) {
+            heading = e.webkitCompassHeading; // iOS：磁北方位角
+            if (heading === undefined || heading === null) return;
+          } else {
+            if (e.alpha === undefined || e.alpha === null) return;
+            heading = 360 - e.alpha; // Android 的 alpha 是逆時針
+          }
+          const trueHeading = (heading + declination + 360) % 360;
+          input.value = trueHeading.toFixed(1); // 即時顯示，尚未鎖定
+        };
+        window.addEventListener(eventName, handler);
+        liveCompass = { handler, eventName, btn, input, idx };
+        btn.textContent = '✅';
+        btn.style.backgroundColor = '#d32f2f'; // 紅色提示讀取中，再按一下鎖定
+      };
+
+      if (isIOS) {
         DeviceOrientationEvent.requestPermission()
           .then(response => {
-            if (response === 'granted') {
-              window.addEventListener('deviceorientation', (e) => {
-                // iOS 使用 webkitCompassHeading (磁北)
-                let heading = e.webkitCompassHeading;
-                if (heading !== undefined) {
-                  let trueHeading = (heading + declination + 360) % 360;
-                  callback(trueHeading.toFixed(1));
-                }
-              }, { once: true });
-            } else {
-              alert('請允許存取動作與方向感測器以使用指南針。');
-            }
+            if (response === 'granted') attach();
+            else alert('請允許存取動作與方向感測器以使用指南針。');
           })
           .catch(err => alert('iOS 授權失敗: ' + err));
       } else {
-        // Android 或其他瀏覽器
-        window.addEventListener('deviceorientationabsolute', (e) => {
-          let heading = 360 - e.alpha; // Android 的 alpha 是逆時針
-          let trueHeading = (heading + declination + 360) % 360;
-          callback(trueHeading.toFixed(1));
-        }, { once: true });
+        attach();
       }
     }
     
@@ -567,23 +592,34 @@
 
       let hasError = false;
       let errorMessage = '⚠️ 交點計算失敗！請檢查以下錯誤：\n\n';
+      let bearingCount = 0;
 
       for (let i = 0; i < recordedPoints.length; i++) {
         let valStr = recordedPoints[i].bearing;
+
+        // 方位角留白＝無訊號紀錄（例如該點收不到訊號、強度記 0）：
+        // 保留在資料表與報表中，但不參與交點計算
+        if (valStr === '' || valStr === undefined || valStr === null) {
+          continue;
+        }
+
         let b = parseFloat(valStr);
-        
-        if (valStr === '' || valStr === undefined) {
-          hasError = true;
-          errorMessage += `• 第 ${i + 1} 筆觀測：未填寫方位角\n`;
-        } else if (isNaN(b) || b < 0 || b > 360) {
+        if (isNaN(b) || b < 0 || b > 360) {
           hasError = true;
           errorMessage += `• 第 ${i + 1} 筆觀測：方位角 (${valStr}) 無效，必須在 0~360 之間\n`;
+        } else {
+          bearingCount++;
         }
       }
 
       if (hasError) {
         alert(errorMessage);
-        renderInputTable(); 
+        renderInputTable();
+        return;
+      }
+
+      if (bearingCount < 2) {
+        alert('至少需要 2 筆有填方位角的觀測才能進行交點計算。\n（方位角留白的紀錄視為無訊號點，不參與計算）');
         return;
       }
 
