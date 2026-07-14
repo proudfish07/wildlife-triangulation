@@ -112,6 +112,9 @@
       background: #fff; border: 1px solid var(--card-border); border-radius: 12px;
       padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
+    /* 卡片白／淺綠交替，避免看錯筆 */
+    .rec-card:nth-child(even) { background: var(--accent-bg); }
+    .rec-card:nth-child(even) .rec-field input { background: #fff; }
     /* 第一層：序號＋日期時間（唯讀） */
     .rec-meta {
       display: flex; align-items: center; gap: 8px;
@@ -382,7 +385,9 @@
         return;
       }
 
-      recordedPoints.forEach((p, idx) => {
+      // 顯示順序：最新的一筆在最上面（編號維持記錄順序，報表仍照時間排序）
+      [...recordedPoints.keys()].reverse().forEach(idx => {
+        const p = recordedPoints[idx];
         const card = document.createElement('div');
         card.className = 'rec-card';
 
