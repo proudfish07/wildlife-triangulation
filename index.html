@@ -157,6 +157,21 @@
 
     #pointTable:not(:empty) { margin-top: 1rem; padding: 10px 12px; background: var(--accent-bg); border-radius: 10px; font-weight: bold; color: var(--primary-dark); }
 
+    /* 實際位置區塊 */
+    #actualBox { margin-top: 12px; padding: 12px; border: 1px dashed #b39ddb; border-radius: 10px; background: #f7f4fb; }
+    .actual-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: bold; color: #6a1b9a; }
+    .btn-actual {
+      border: none; border-radius: 8px; background: #8e24aa; color: #fff;
+      padding: 8px 12px; font-size: 0.9rem; font-weight: bold; cursor: pointer;
+    }
+    .btn-actual:disabled { opacity: 0.6; }
+    .dist-text { margin-top: 8px; font-size: 1rem; color: #4a148c; }
+    .dist-text b { font-size: 1.1rem; }
+    .btn-actual-clear {
+      margin-top: 8px; border: 1px solid #b39ddb; background: #fff; color: #6a1b9a;
+      border-radius: 8px; padding: 5px 12px; font-size: 0.82rem; cursor: pointer;
+    }
+
     @media (max-width: 600px) {
       .input-panel { padding: 0 0.8rem 0.8rem; }
       .input-panel > button, .input-panel .btn-clear { font-size: 0.9em; padding: 0.5rem 0.7rem; }
@@ -204,7 +219,10 @@
     <div class="main-inputs" style="background: var(--accent-bg); padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid var(--card-border);">
       <div class="field-group" style="margin-bottom: 10px;">
         <label style="display: block; font-weight: bold; color: var(--primary); margin-bottom: 5px;">🔍 目前追蹤個體編號</label>
-        <select id="subjectSelect" onchange="onSubjectSelect()" style="width: 100%; padding: 10px; font-size: 18px; border: 1.5px solid var(--card-border); border-radius: 8px; box-sizing: border-box; background: #fff;"></select>
+        <div style="display: flex; gap: 8px;">
+          <select id="subjectSelect" onchange="onSubjectSelect()" style="flex: 1; min-width: 0; padding: 10px; font-size: 18px; border: 1.5px solid var(--card-border); border-radius: 8px; box-sizing: border-box; background: #fff;"></select>
+          <button type="button" onclick="deleteCurrentSubject()" title="刪除目前個體" aria-label="刪除目前個體" style="flex: 0 0 auto; width: 46px; border: 1.5px solid var(--danger); background: #fff; color: var(--danger); border-radius: 8px; font-size: 1.2rem; cursor: pointer;">🗑️</button>
+        </div>
       </div>
       <div class="field-group" style="margin-bottom: 10px;">
         <label style="display: block; font-weight: bold; color: var(--primary); margin-bottom: 5px;">🧭 偏角修正 (磁北轉真北)</label>
@@ -225,6 +243,7 @@
     <div id="recordList"></div>
     
     <div id="pointTable"></div>
+    <div id="actualBox"></div>
   </div>
   </div><!-- /sheet -->
 
@@ -244,8 +263,22 @@
 
     let recordedPoints = [];
     let currentPrediction = null;
+    let currentActual = null;      // 實際找到的位置 { lat, lon }
     let currentLocationCircle = null;
     let errorCircle = null;
+    let actualMarker = null;
+    let actualLine = null;
+
+    // 兩座標間的地表直線距離（公尺，Haversine）
+    function metersBetween(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
 
     // === 多個體資料管理：每個個體編號各存一份觀測資料、備註與計算結果 ===
     let sessions = {};
@@ -255,7 +288,8 @@
       sessions[currentSubject] = {
         points: recordedPoints,
         note: document.getElementById('sessionNote').value,
-        prediction: currentPrediction
+        prediction: currentPrediction,
+        actual: currentActual
       };
       localStorage.setItem('wildlife_sessions', JSON.stringify(sessions));
       localStorage.setItem('wildlife_current_subject', currentSubject);
@@ -270,10 +304,12 @@
       recordedPoints.forEach(p => { if (!p.isActive) p.isActive = '否'; });
       document.getElementById('sessionNote').value = s.note || '';
       currentPrediction = s.prediction || null;
+      currentActual = s.actual || null;
       localStorage.setItem('wildlife_current_subject', currentSubject);
       renderInputTable();
       updateResultDisplay(true);
       clearCalcLayers();
+      updateActualDisplay();
     }
 
     function refreshSubjectOptions() {
@@ -308,6 +344,21 @@
       }
     }
 
+    // 刪除目前個體（含其所有資料）——個體編號輸入錯誤時可整筆移除
+    function deleteCurrentSubject() {
+      if (!confirm(`確定要刪除個體「${currentSubject}」及其所有資料嗎？\n（觀測紀錄、備註、三角預測與實際觀察都會一併刪除，無法復原）`)) return;
+      delete sessions[currentSubject];
+      let ids = Object.keys(sessions);
+      if (ids.length === 0) {
+        sessions['未命名'] = { points: [], note: '', prediction: null, actual: null };
+        ids = ['未命名'];
+      }
+      currentSubject = ids[0];
+      localStorage.setItem('wildlife_sessions', JSON.stringify(sessions));
+      loadSession(currentSubject);
+      refreshSubjectOptions();
+    }
+
     // 初始化：載入所有個體資料；舊版單一份資料自動轉移
     function initSessions() {
       try { sessions = JSON.parse(localStorage.getItem('wildlife_sessions')) || {}; } catch (e) { sessions = {}; }
@@ -338,6 +389,9 @@
         if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
       });
       if (errorCircle) { map.removeLayer(errorCircle); errorCircle = null; }
+      actualMarker = null; // 已隨上面一併移除，重畫時再建立
+      actualLine = null;
+      drawActual();
     }
 
     // 顯示計算結果（含誤差半徑）
@@ -353,15 +407,147 @@
       }
     }
 
+    // 預測 vs 實際的距離（公尺），無法計算時回傳 null
+    function predActualDistance() {
+      if (!currentPrediction || !currentActual) return null;
+      return metersBetween(currentPrediction.lat, currentPrediction.lon, currentActual.lat, currentActual.lon);
+    }
+
+    // 在地圖上畫出實際位置標記，以及與預測位置的連線
+    function drawActual() {
+      if (actualMarker) { map.removeLayer(actualMarker); actualMarker = null; }
+      if (actualLine) { map.removeLayer(actualLine); actualLine = null; }
+      if (!currentActual) return;
+      const dist = predActualDistance();
+      actualMarker = L.marker([currentActual.lat, currentActual.lon]).addTo(map)
+        .bindPopup(`✅ 實際位置<br>${currentActual.lat.toFixed(5)}, ${currentActual.lon.toFixed(5)}` +
+          (dist != null ? `<br>與預測相距約 ${Math.round(dist)} 公尺` : ''));
+      if (currentPrediction) {
+        actualLine = L.polyline(
+          [[currentPrediction.lat, currentPrediction.lon], [currentActual.lat, currentActual.lon]],
+          { color: '#8e24aa', weight: 3, dashArray: '8 5' }
+        ).addTo(map);
+      }
+    }
+
+    // 面板中「實際位置」區塊：標記鈕、座標（可改）、與預測的距離、清除
+    function updateActualDisplay() {
+      const box = document.getElementById('actualBox');
+      if (!box) return;
+      box.innerHTML = '';
+
+      const head = document.createElement('div');
+      head.className = 'actual-head';
+      head.innerHTML = '<span>✅ 實際找到的位置</span>';
+      const markBtn = document.createElement('button');
+      markBtn.type = 'button';
+      markBtn.className = 'btn-actual';
+      markBtn.textContent = currentActual ? '📍 用目前 GPS 更新' : '📍 標記實際位置';
+      markBtn.onclick = markActualLocation;
+      head.appendChild(markBtn);
+      box.appendChild(head);
+
+      if (!currentActual) return;
+
+      // 座標可手動修改
+      const coords = document.createElement('div');
+      coords.className = 'rec-coords';
+      coords.style.marginTop = '8px';
+      [['lat', '實際緯度'], ['lon', '實際經度']].forEach(([key, cap]) => {
+        const wrap = document.createElement('label');
+        wrap.className = 'rec-field';
+        const capEl = document.createElement('span');
+        capEl.textContent = cap;
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.step = 'any';
+        inp.value = currentActual[key];
+        inp.oninput = () => {
+          const v = parseFloat(inp.value);
+          currentActual[key] = isNaN(v) ? inp.value : v;
+          saveCurrentSession();
+          drawActual();
+          renderDistance();
+        };
+        wrap.appendChild(capEl);
+        wrap.appendChild(inp);
+        coords.appendChild(wrap);
+      });
+      box.appendChild(coords);
+
+      const dist = document.createElement('div');
+      dist.id = 'distText';
+      dist.className = 'dist-text';
+      box.appendChild(dist);
+
+      const clr = document.createElement('button');
+      clr.type = 'button';
+      clr.className = 'btn-actual-clear';
+      clr.textContent = '清除實際位置';
+      clr.onclick = () => {
+        currentActual = null;
+        saveCurrentSession();
+        drawActual();
+        updateActualDisplay();
+      };
+      box.appendChild(clr);
+
+      renderDistance();
+    }
+
+    function renderDistance() {
+      const el = document.getElementById('distText');
+      if (!el) return;
+      const dist = predActualDistance();
+      if (dist != null) {
+        el.innerHTML = `📏 預測 vs 實際距離：<b>約 ${Math.round(dist)} 公尺</b>`;
+      } else {
+        el.textContent = '（尚無交點計算結果，先按「交點計算」才能算出距離）';
+      }
+    }
+
+    // 以目前 GPS 標記實際位置
+    function markActualLocation() {
+      if (!navigator.geolocation) { alert('你的裝置或瀏覽器不支援定位功能'); return; }
+      const btn = document.querySelector('.btn-actual');
+      const orig = btn ? btn.textContent : '';
+      if (btn) { btn.textContent = '⏳ 定位中…'; btn.disabled = true; }
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          currentActual = {
+            lat: +pos.coords.latitude.toFixed(5),
+            lon: +pos.coords.longitude.toFixed(5)
+          };
+          saveCurrentSession();
+          drawActual();
+          updateActualDisplay();
+          // 有預測位置時，縮放到同時看得到預測與實際兩點
+          if (currentPrediction) {
+            map.fitBounds(L.latLngBounds([
+              [currentActual.lat, currentActual.lon],
+              [currentPrediction.lat, currentPrediction.lon]
+            ]), { padding: [50, 50], maxZoom: 15 });
+          }
+        },
+        err => {
+          if (btn) { btn.textContent = orig; btn.disabled = false; }
+          alert('無法取得定位：' + err.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
     function clearAllData() {
       if (confirm(`確定要清除「${currentSubject}」的所有資料嗎？此動作無法還原。\n（清除觀測紀錄、備註與計算結果；個體仍保留在清單中）`)) {
         recordedPoints = [];
         document.getElementById('sessionNote').value = '';
         currentPrediction = null;
+        currentActual = null;
         saveCurrentSession();
         renderInputTable();
         updateResultDisplay();
         clearCalcLayers();
+        updateActualDisplay();
         showCurrentLocationOnMap();
       }
     }
@@ -641,12 +827,15 @@
         // 地圖縮放以交會點為主：涵蓋所有射線交點（含預測位置）
         map.fitBounds(L.latLngBounds(intersections), { padding: [40, 40], maxZoom: 15 });
 
+        drawActual();              // 若已標記實際位置，重畫連線
         saveCurrentSession();
         updateResultDisplay();
+        renderDistance();
       } else {
         currentPrediction = null;
         saveCurrentSession();
         updateResultDisplay();
+        renderDistance();
       }
     }
 
@@ -774,7 +963,16 @@
         }
         text += `Google地圖：https://www.google.com/maps?q=${currentPrediction.lat.toFixed(5)},${currentPrediction.lon.toFixed(5)}\n`;
       }
-    
+
+      if (currentActual) {
+        text += `\n✅ 實際位置：\n緯度: ${currentActual.lat.toFixed(5)}, 經度: ${currentActual.lon.toFixed(5)}\n`;
+        text += `Google地圖：https://www.google.com/maps?q=${currentActual.lat.toFixed(5)},${currentActual.lon.toFixed(5)}\n`;
+        const dist = predActualDistance();
+        if (dist != null) {
+          text += `📏 預測與實際相距：約 ${Math.round(dist)} 公尺\n`;
+        }
+      }
+
       // 分享邏輯... (其餘不變)
       if (navigator.share) {
         navigator.share({ title: '野生動物觀測紀錄', text: text });
